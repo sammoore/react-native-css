@@ -4,6 +4,7 @@ import {
   Fragment,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ComponentType,
 } from "react";
@@ -109,16 +110,37 @@ export function useNativeCss(
     );
     // State initializers may be discarded by React StrictMode. Subscribe once
     // the component commits instead of retaining an abandoned initializer.
+    // cleanupEffect records the dependency set on the effect so the commit
+    // effect below can replay subscriptions without a full rule re-pass.
     cleanupEffect(ruleEffect);
     return initialState;
   });
 
+  // PERF: distinguishes a fresh mount (first effect setup) from a mid-life
+  // replay (React <Activity> hide/show, StrictMode effect re-invocation).
+  const hasCommittedRef = useRef(false);
+
   useEffect(() => {
-    // Reconnect subscriptions after React replays an effect setup.
+    // Reconnect subscriptions after the initializer's (or a prior replay's)
+    // cleanupEffect detached them.
     if (state.ruleEffect.observers.size === 0) {
-      state.ruleEffect.run();
-      state.styleEffect.run();
+      if (hasCommittedRef.current) {
+        // Mid-life replay: conditions (media/container/interaction state)
+        // may have changed while unsubscribed. Re-run rule matching and
+        // force a catch-up render. This path is rare.
+        state.ruleEffect.run();
+        state.styleEffect.run();
+      } else {
+        // Fresh mount: the initializer evaluated current conditions moments
+        // ago. Cheaply replay the recorded dependencies instead of re-running
+        // a full updateRules pass and forcing a second render per mount.
+        for (const observable of state.ruleEffect.dependencies ?? []) {
+          observable.get(state.ruleEffect);
+        }
+        state.stylesObs?.get(state.styleEffect);
+      }
     }
+    hasCommittedRef.current = true;
     return () => {
       cleanupEffect(state.ruleEffect);
       cleanupEffect(state.styleEffect);

@@ -12,6 +12,12 @@ import type { StyleDescriptor } from "react-native-css/compiler";
 export type Effect = {
   observers: Set<Observable<any, any>>;
   run(): void;
+  /**
+   * PERF: the dependency set recorded by the most recent cleanupEffect().
+   * Lets the owning component replay subscriptions cheaply instead of
+   * re-running a full rule pass (see useNativeCss's reconnect effect).
+   */
+  dependencies?: Observable<any, any>[];
 };
 
 export type Observable<Value, Arg = Value> = {
@@ -130,7 +136,11 @@ export function observable<Value, Arg = Value>(
 
 export function cleanupEffect(effect: Effect) {
   if (!effect) return;
-  const dependencies = Array.from(effect.observers);
+  // PERF: record the dependency set before detaching. Every effect setup is
+  // immediately preceded by a cleanupEffect call on that effect (the state
+  // initializer's discard or React's cleanup-then-setup replay), so this is
+  // always the current set — see useNativeCss's reconnect effect.
+  const dependencies = (effect.dependencies = Array.from(effect.observers));
   effect.observers.clear();
   for (const dep of dependencies) {
     dep.unsubscribe(effect);
