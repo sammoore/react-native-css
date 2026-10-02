@@ -18,6 +18,14 @@ export type Effect = {
    * re-running a full rule pass (see useNativeCss's reconnect effect).
    */
   dependencies?: Observable<any, any>[];
+  /**
+   * PERF: [observable, value-at-detach] pairs recorded by the most recent
+   * cleanupEffect(). Lets useNativeCss's fresh-mount reconnect detect
+   * whether any condition the component's rule matching actually read has
+   * changed between the initializer and the commit effect (see
+   * hasChangedDependencies).
+   */
+  snapshots?: [Observable<any, any>, unknown][];
 };
 
 export type Observable<Value, Arg = Value> = {
@@ -141,10 +149,42 @@ export function cleanupEffect(effect: Effect) {
   // initializer's discard or React's cleanup-then-setup replay), so this is
   // always the current set — see useNativeCss's reconnect effect.
   const dependencies = (effect.dependencies = Array.from(effect.observers));
+  // PERF: capture each dependency's current value BEFORE detaching. While
+  // this effect is still subscribed, computed observables return their
+  // cached value (didInit is true), so this is O(deps) cheap reads, not
+  // recomputations. Used by hasChangedDependencies.
+  effect.snapshots = dependencies.map(
+    (observable) =>
+      [observable, observable.get()] as [Observable<any, any>, unknown],
+  );
   effect.observers.clear();
   for (const dep of dependencies) {
     dep.unsubscribe(effect);
   }
+}
+
+/**
+ * PERF: whether any dependency recorded by the most recent cleanupEffect()
+ * changed value since it was detached.
+ *
+ * Scoping to the effect's own dependencies is what keeps the fresh-mount
+ * fast path fast: unrelated observable activity elsewhere in the app
+ * (another component's layout, interaction, or theme change) cannot cause
+ * a false positive the way a global change counter would.
+ *
+ * The reads do not subscribe. A computed observable whose last subscriber
+ * was just detached will recompute on read (didInit was reset by
+ * unsubscribe), which is no more work than the full reconnect would have
+ * performed anyway. Returns false when there is nothing to compare (an
+ * effect that never subscribed, or one whose deps are unchanged).
+ */
+export function hasChangedDependencies(effect: Effect): boolean {
+  const snapshots = effect.snapshots;
+  if (!snapshots) return false;
+  for (const [observable, value] of snapshots) {
+    if (!Object.is(observable.get(), value)) return true;
+  }
+  return false;
 }
 
 /** Family Helpers ************************************************************/

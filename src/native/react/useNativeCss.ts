@@ -20,6 +20,7 @@ import {
   type ContainerContextValue,
   type Effect,
   type Getter,
+  hasChangedDependencies,
   type VariableContextValue,
 } from "../reactivity";
 import { animatedComponentFamily } from "../reanimated";
@@ -124,16 +125,20 @@ export function useNativeCss(
     // Reconnect subscriptions after the initializer's (or a prior replay's)
     // cleanupEffect detached them.
     if (state.ruleEffect.observers.size === 0) {
-      if (hasCommittedRef.current) {
-        // Mid-life replay: conditions (media/container/interaction state)
-        // may have changed while unsubscribed. Re-run rule matching and
-        // force a catch-up render. This path is rare.
+      if (hasCommittedRef.current || hasChangedDependencies(state.ruleEffect)) {
+        // Mid-life replay, or a condition this component's rule matching
+        // actually read changed between the initializer and this commit —
+        // e.g. a pre-rendered hidden <Activity> whose color scheme, window
+        // dimensions, or container layout changed before first show. Re-run
+        // rule matching against current conditions and force a catch-up
+        // render. These paths are rare.
         state.ruleEffect.run();
         state.styleEffect.run();
       } else {
-        // Fresh mount: the initializer evaluated current conditions moments
-        // ago. Cheaply replay the recorded dependencies instead of re-running
-        // a full updateRules pass and forcing a second render per mount.
+        // Fresh mount with unchanged conditions: the initializer evaluated
+        // current conditions moments ago in the same commit. Cheaply replay
+        // the recorded dependencies instead of re-running a full updateRules
+        // pass and forcing a second render per mount.
         for (const observable of state.ruleEffect.dependencies ?? []) {
           observable.get(state.ruleEffect);
         }
