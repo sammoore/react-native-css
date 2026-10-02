@@ -139,10 +139,14 @@ export function useNativeCss(
         // current conditions moments ago in the same commit. Cheaply replay
         // the recorded dependencies instead of re-running a full updateRules
         // pass and forcing a second render per mount.
+        //
+        // Only ruleEffect needs replaying: its dependency subscriptions are
+        // established exclusively by updateRules, which won't run again until
+        // the className or inherited props change. styleEffect's subscription
+        // to stylesObs is re-established by getStyledProps on every render.
         for (const observable of state.ruleEffect.dependencies ?? []) {
           observable.get(state.ruleEffect);
         }
-        state.stylesObs?.get(state.styleEffect);
       }
     }
     hasCommittedRef.current = true;
