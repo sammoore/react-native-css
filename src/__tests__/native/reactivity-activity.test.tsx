@@ -114,13 +114,7 @@ test("unrelated condition changes during the pre-render window do not force a ca
   // This component has no conditional rules, so the color scheme observable
   // is NOT among its recorded dependencies. Flipping it while the boundary
   // is hidden is unrelated observable activity inside the initializer→commit
-  // window. The fresh-mount reconnect must stay on the cheap replay path:
-  // dependency scoping (not a global change counter) is what keeps it there.
-  //
-  // The render counter asserts exactly one render pass for the show. The
-  // full-reconnect path dispatches a setState that commits a second, forced
-  // render pass — this test fails if that path is taken (or if the scoping
-  // regresses into "any observable change anywhere forces the full path").
+  // window. The fresh-mount reconnect should stay on the cheap replay path.
   let renders = 0;
   function CountingFixture({ className }: { className: string }) {
     renders++;
@@ -132,11 +126,9 @@ test("unrelated condition changes during the pre-render window do not force a ca
       <CountingFixture className="audit-activity-unrelated" />
     </Activity>,
   );
-  // The hidden pre-render still runs the component body (that's what
-  // establishes the initializer→commit window this test exercises).
+
   expect(renders).toBe(1);
 
-  // Unrelated observable change lands inside the window.
   act(() => {
     colorScheme.set("dark");
   });
