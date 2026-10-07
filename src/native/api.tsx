@@ -37,6 +37,18 @@ const defaultMapping: StyledConfiguration<ComponentType<{ style: unknown }>> = {
 };
 
 /**
+ * PERF: the mapping object is almost always a module-level constant shared by
+ * every instance of a component (see `src/components/*.tsx`). Cache the
+ * derived configs so each mount skips `mappingToConfig`'s allocations and
+ * `useState`, and so all instances share one `configs` identity (better
+ * `getRuleVariation` and `generateStateHash` cache hits).
+ */
+const mappingConfigCache = new WeakMap<
+  StyledConfiguration<any>,
+  ReturnType<typeof mappingToConfig>
+>();
+
+/**
  * Generates a new Higher-Order component the wraps the base component and applies the styles.
  * This is added to the `interopComponents` map so that it can be used in the `wrapJSX` function
  * @param baseComponent
@@ -86,8 +98,12 @@ export const useCssElement = <
   incomingProps: Props,
   mapping: M,
 ) => {
-  const [config] = useState(() => mappingToConfig(mapping));
-  return useNativeCss(component, incomingProps, config);
+  let configs = mappingConfigCache.get(mapping);
+  if (!configs) {
+    configs = mappingToConfig(mapping);
+    mappingConfigCache.set(mapping, configs);
+  }
+  return useNativeCss(component, incomingProps, configs);
 };
 
 export function useNativeVariable(name: string) {
