@@ -395,51 +395,16 @@ function deepMergeConfig(
       // Special handling for style target when we have inline styles
       result = { ...left, ...right };
 
-      // Handle null/undefined inline styles
-      if (right?.style === null || right?.style === undefined) {
+      if (rightIsInline) {
+        // Inline styles are filtered and merged by the length-1 array target
+        // path below, which always assigns or deletes `result.style`. Doing
+        // it here as well would filter the inline style twice per render.
+      } else if (right?.style === null || right?.style === undefined) {
+        // Handle null/undefined styles
         if (left?.style) {
           result.style = left.style;
         }
-      } else if (rightIsInline && right?.style) {
-        // Filter inline styles if rightIsInline is true
-        const filteredRightStyle = filterCssVariables(right.style);
-
-        if (left?.style) {
-          if (!filteredRightStyle) {
-            // All inline styles were CSS variables, only use left
-            result.style = left.style;
-          } else {
-            const leftStyle = left.style;
-
-            // For arrays or objects, check if we need to create a style array
-            const leftIsObject =
-              typeof leftStyle === "object" && !Array.isArray(leftStyle);
-            const rightIsObject =
-              typeof filteredRightStyle === "object" &&
-              !Array.isArray(filteredRightStyle);
-
-            if (leftIsObject && rightIsObject) {
-              if (hasNonOverlappingProperties(leftStyle, filteredRightStyle)) {
-                result.style = [leftStyle, filteredRightStyle];
-              } else {
-                // All left properties are in right, right overrides
-                result.style = filteredRightStyle;
-              }
-            } else {
-              // One or both are arrays, merge them
-              result.style = [leftStyle, filteredRightStyle];
-            }
-          }
-        } else {
-          // No left style, just use filtered right
-          if (filteredRightStyle) {
-            result.style = filteredRightStyle;
-          } else {
-            // All filtered out, remove style prop
-            delete result.style;
-          }
-        }
-      } else if (!rightIsInline && right?.style) {
+      } else if (right?.style) {
         // Merging non-inline styles (e.g., important styles)
         if (left?.style) {
           // If left.style is an array, append right.style
