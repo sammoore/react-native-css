@@ -179,6 +179,7 @@
     "bench": "yarn bench:dev && yarn bench:prod",
     "bench:dev": "jest -c .config/bench.jest.config.cjs",
     "bench:prod": "NODE_ENV=production jest -c .config/bench.jest.config.cjs",
+    "bench:tw-shape": "jest -c .config/bench.jest.config.cjs --testMatch '**/*.diag.tsx'",
     "build": "bob build",
     "clean": "find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +; yarn install --immutable --immutable-cache --check-cache; yarn build; yes | yarn example expo prebuild --clean",
     "clean:android": "yarn clean && yarn example android",
