@@ -49,11 +49,13 @@ export function observable<Value, Arg = Value>(
   let value: Value;
   let isStatic = typeof init !== "function";
   let didInit: boolean | undefined;
+  let hasValue = false;
   let lastArg: Arg | undefined;
 
   if (typeof init !== "function") {
     value = init;
     didInit = true;
+    hasValue = true;
   }
 
   const observers = new Set<Effect>();
@@ -63,18 +65,22 @@ export function observable<Value, Arg = Value>(
       if (!isStatic) {
         cleanupEffect(effect);
         const nextValue = (init as Read<Value, Arg>)(getter, lastArg);
+        // PERF: if no subscriber is attached, detach the dependencies read
+        // during this computation, recording them for a future subscription
+        // (see the reuse path in `get`).
+        if (observers.size === 0) cleanupEffect(effect);
         if (equality(value, nextValue)) {
           return;
         }
         value = nextValue;
+        hasValue = true;
       }
 
       notify();
     },
   };
 
-  const getter: Getter = (observable) =>
-    observable.get(observers.size > 0 ? effect : undefined);
+  const getter: Getter = (observable) => observable.get(effect);
 
   function get(subscriber?: Effect) {
     if (subscriber) {
@@ -83,9 +89,50 @@ export function observable<Value, Arg = Value>(
       subscriber.observers.add(obs);
     }
     if (!didInit) {
+      /**
+       * PERF: the value may already be computed and fresh. This happens when
+       * a computed observable is read without a subscriber (e.g `stylesObs.get()`
+       * inside updateRules to collect guards) and then read again with a
+       * subscriber during the same render (e.g `getStyledProps`). Without this
+       * check, the 0 -> 1 subscriber transition resets `didInit` and forces a
+       * full recompute (e.g a second `calculateProps` pass per mount).
+       *
+       * `cleanupEffect` recorded the dependencies (and their values at the
+       * time) of the last computation. If none of them changed since, the
+       * cached value is still fresh and can be reused.
+       */
+      if (
+        hasValue &&
+        !isStatic &&
+        effect.dependencies &&
+        !hasChangedDependencies(effect)
+      ) {
+        // A subscriber is attaching: replay the recorded dependency
+        // subscriptions so the computed observable stays reactive, without
+        // recomputing its value. Subscriber-less reads reuse the value but
+        // leave the dependencies detached (the unobserved invariant).
+        if (observers.size > 0) {
+          for (const dep of effect.dependencies) {
+            dep.get(effect);
+          }
+        }
+        didInit = observers.size > 0;
+        return value;
+      }
+
       cleanupEffect(effect);
       value = (init as Read<Value, Arg>)(getter, lastArg);
       didInit = observers.size > 0;
+      hasValue = true;
+
+      if (!didInit) {
+        // PERF: no subscriber is attached, so the dependencies read during
+        // this computation are detached again (the unobserved invariant).
+        // `cleanupEffect` records them — along with their values at
+        // computation time — so a future subscription can replay them
+        // without a recompute (see the reuse path above).
+        cleanupEffect(effect);
+      }
     }
 
     return value;
@@ -104,10 +151,16 @@ export function observable<Value, Arg = Value>(
       didInit = observers.size > 0;
       lastArg = arg;
 
+      // PERF: if no subscriber is attached, detach the dependencies read
+      // during this computation, recording them for a future subscription
+      // (see the reuse path in `get`).
+      if (!didInit) cleanupEffect(effect);
+
       if (equality(value, nextValue)) {
         return;
       }
       value = nextValue;
+      hasValue = true;
     }
 
     notify();
