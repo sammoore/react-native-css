@@ -111,9 +111,9 @@ export function useNativeVariable(name: string) {
   useEffect(() => {
     // React StrictMode replays setup after cleanup without another render.
     if (effect.observers.size === 0) forceUpdate((state) => state + 1);
-    return () => cleanupEffect(effect);
+    return () => cleanupEffect(effect, false);
   }, [effect]);
-  cleanupEffect(effect);
+  cleanupEffect(effect, false);
   return resolveValue([{}, "var", [name]], effect.get, { inheritedVariables });
 }
 
