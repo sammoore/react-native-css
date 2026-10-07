@@ -31,7 +31,7 @@ export function updateRules(
   forceUpdate = false,
   isRerender = true,
 ): ComponentState {
-  cleanupEffect(state.ruleEffect);
+  cleanupEffect(state.ruleEffect, false);
   const guards: RenderGuard[] = [];
   const rules = new Set<StyleRule | InlineVariable | VariableContextValue>();
   if (forceUpdate) {

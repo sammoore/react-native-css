@@ -195,22 +195,36 @@ export function observable<Value, Arg = Value>(
   return obs;
 }
 
-export function cleanupEffect(effect: Effect) {
+export function cleanupEffect(
+  effect: Effect,
+  /**
+   * PERF: capturing snapshots costs an extra array + a `.get()` per
+   * dependency. Only the fresh-mount reconnect path in `useNativeCss` (and
+   * computed observables reusing a cached value) reads them, so component
+   * effects skip the capture on every rule re-pass, unmount and
+   * StrictMode/Activity replay.
+   */
+  captureSnapshots = true,
+) {
   if (!effect) return;
   // PERF: record the dependency set before detaching. Every effect setup is
   // immediately preceded by a cleanupEffect call on that effect (the state
   // initializer's discard or React's cleanup-then-setup replay), so this is
   // always the current set — see useNativeCss's reconnect effect.
   const dependencies = (effect.dependencies = Array.from(effect.observers));
-  // PERF: capture each dependency's current value BEFORE detaching. While
-  // this effect is still subscribed, computed observables return their
-  // cached value (didInit is true), so this is O(deps) cheap reads, not
-  // recomputations. Used by hasChangedDependencies.
-  effect.snapshots = dependencies.map(
-    (observable) =>
-      [observable, observable.get()] as [Observable<any, any>, unknown],
-  );
   effect.observers.clear();
+  if (captureSnapshots) {
+    // PERF: capture each dependency's current value BEFORE detaching. While
+    // this effect is still subscribed, computed observables return their
+    // cached value (didInit is true), so this is O(deps) cheap reads, not
+    // recomputations. Used by hasChangedDependencies.
+    effect.snapshots = dependencies.map(
+      (observable) =>
+        [observable, observable.get()] as [Observable<any, any>, unknown],
+    );
+  } else {
+    effect.snapshots = undefined;
+  }
   for (const dep of dependencies) {
     dep.unsubscribe(effect);
   }
