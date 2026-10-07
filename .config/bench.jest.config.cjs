@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 
 /**
- * Jest config for the benchmarks in src/bench (*.bench.tsx). The default
+ * Jest config for the benchmarks in bench/ (*.bench.tsx). The default
  * testMatch only picks up .test/.spec files, so `yarn test` never runs them.
  *
  * Benchmarks don't exercise reanimated, so this skips the reanimated/worklets
@@ -45,7 +45,7 @@ if (interopDir) {
 module.exports = {
   ...jestExpo,
   rootDir,
-  roots: ["<rootDir>/src/bench"],
+  roots: ["<rootDir>/bench"],
   testMatch: ["**/*.bench.tsx"],
   testPathIgnorePatterns: ["dist/"],
   // Run suites one at a time so nw4 and nw5 don't compete for CPU.

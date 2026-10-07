@@ -16,7 +16,7 @@ import { runSuite, THEME } from "./suite";
  * intercepts calls from styles/index.ts. (This does not work for calls made
  * inside the same module, which is why only calculateProps is counted.)
  */
-const calculatePropsModule = require("../native/styles/calculate-props");
+const calculatePropsModule = require("../src/native/styles/calculate-props");
 let calculatePropsCalls = 0;
 const originalCalculateProps = calculatePropsModule.calculateProps;
 calculatePropsModule.calculateProps = (...args: unknown[]) => {
