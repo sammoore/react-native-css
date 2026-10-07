@@ -195,6 +195,18 @@ export function getStyledProps(
 
   const styledProps = state.stylesObs?.get(state.styleEffect);
 
+  /**
+   * PERF: `updateRules` caches the interaction-family membership on the
+   * state. Fall back to the (cacheable) WeakMap lookups only if a state
+   * somehow reached render without a rule pass.
+   */
+  const interactions = (state.interactions ??= {
+    hover: hoverFamily.has(state.ruleEffectGetter),
+    active: activeFamily.has(state.ruleEffectGetter),
+    focus: focusFamily.has(state.ruleEffectGetter),
+    layout: containerLayoutFamily.has(state.ruleEffectGetter),
+  });
+
   // Each config merges a complete props object. Preserve its full target path
   // before the next config merges unrelated inline props over that object.
   const computedTargets: { path: string[]; value: unknown }[] = [];
@@ -234,7 +246,7 @@ export function getStyledProps(
     }
 
     // Apply the handlers
-    if (hoverFamily.has(state.ruleEffectGetter)) {
+    if (interactions.hover) {
       result ??= {};
       result.onHoverIn = getInteractionHandler(
         state.ruleEffectGetter,
@@ -248,7 +260,7 @@ export function getStyledProps(
       );
     }
 
-    if (activeFamily.has(state.ruleEffectGetter)) {
+    if (interactions.active) {
       result ??= {};
       result.onPress = getInteractionHandler(
         state.ruleEffectGetter,
@@ -267,7 +279,7 @@ export function getStyledProps(
       );
     }
 
-    if (focusFamily.has(state.ruleEffectGetter)) {
+    if (interactions.focus) {
       result ??= {};
       result.onBlur = getInteractionHandler(
         state.ruleEffectGetter,
@@ -281,7 +293,7 @@ export function getStyledProps(
       );
     }
 
-    if (containerLayoutFamily.has(state.ruleEffectGetter)) {
+    if (interactions.layout) {
       result ??= {};
       result.onLayout = getInteractionHandler(
         state.ruleEffectGetter,

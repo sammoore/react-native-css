@@ -57,6 +57,19 @@ export type ComponentState = {
 
   animated?: boolean;
   pressable?: undefined | boolean;
+
+  /**
+   * PERF: which interaction handlers this component must attach. Mirrors the
+   * `hoverFamily/activeFamily/focusFamily/containerLayoutFamily` membership
+   * of `ruleEffectGetter`, computed once per `updateRules` pass instead of
+   * doing four WeakMap lookups on every render.
+   */
+  interactions?: {
+    hover: boolean;
+    active: boolean;
+    focus: boolean;
+    layout: boolean;
+  };
 };
 
 /**
