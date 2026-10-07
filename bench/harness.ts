@@ -26,13 +26,20 @@ export interface Stats {
 
 const round = (n: number) => Math.round(n * 100) / 100;
 
+/**
+ * Milliseconds from a high-resolution clock. React Native's jest setup
+ * replaces performance.now() with a millisecond-resolution clock, which is too
+ * coarse for short scenarios.
+ */
+const now = () => Number(process.hrtime.bigint()) / 1e6;
+
 export function measure(fn: () => void, runs = RUNS, warmup = WARMUP_RUNS) {
   for (let i = 0; i < warmup; i++) fn();
   const times: number[] = [];
   for (let i = 0; i < runs; i++) {
-    const start = performance.now();
+    const start = now();
     fn();
-    times.push(performance.now() - start);
+    times.push(now() - start);
   }
   const sorted = [...times].sort((a, b) => a - b);
   return {
