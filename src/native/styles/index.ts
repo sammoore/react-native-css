@@ -213,12 +213,11 @@ export function getStyledProps(
   const consumedSources: string[] = [];
 
   for (const config of state.configs) {
-    result = deepMergeConfig(
-      config,
-      nativeStyleMapping(config, adaptProps(styledProps?.normal)),
-      inline,
-      true,
-    );
+    // PERF: hoist the computed (left) props once per config. `left` is also
+    // the signal for whether this config contributed computed styles, which
+    // gates the `computedTargets` bookkeeping below.
+    const left = nativeStyleMapping(config, adaptProps(styledProps?.normal));
+    result = deepMergeConfig(config, left, inline, true);
 
     if (styledProps?.important) {
       result = deepMergeConfig(
@@ -228,7 +227,7 @@ export function getStyledProps(
       );
     }
 
-    if (result && config.target) {
+    if (left && result && config.target) {
       const path = Array.isArray(config.target)
         ? config.target
         : [config.target];
@@ -347,7 +346,13 @@ function mergeDefinedProps(
   left: Record<string, any> | undefined,
   right: Record<string, any>,
 ) {
-  const result = left ? { ...left } : {};
+  // PERF: with no computed (left) styles there is nothing for undefined or
+  // empty-object values to clobber — a plain copy is equivalent and skips
+  // the per-key typeof checks below.
+  if (!left) {
+    return { ...right };
+  }
+  const result = { ...left };
   for (const key in right) {
     const value = right[key];
     if (value === undefined) continue;
