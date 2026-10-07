@@ -22,6 +22,24 @@ import type { ComponentState, Config } from "./useNativeCss";
 
 export const INLINE_RULE_SYMBOL = Symbol("react-native-css.inlineRule");
 
+/**
+ * PERF: `className` strings are highly repetitive (e.g identical strings
+ * across every row of a list), but `String.split` allocates a new array on
+ * every call. `updateRules` runs on every mount and every guard-triggered
+ * re-collection, so cache the split by string identity.
+ */
+const classNameSplitCache = new Map<string, string[]>();
+function splitClassNames(source: string): string[] {
+  let classNames = classNameSplitCache.get(source);
+  if (classNames === undefined) {
+    classNames = source.split(/\s+/);
+    // Guard against unbounded growth when class names are dynamic
+    if (classNameSplitCache.size > 10_000) classNameSplitCache.clear();
+    classNameSplitCache.set(source, classNames);
+  }
+  return classNames;
+}
+
 export function updateRules(
   state: ComponentState,
   // Either update the state with new props or use the current props
@@ -61,8 +79,7 @@ export function updateRules(
     const styleRuleSet = [];
 
     if (typeof source === "string") {
-      const classNames = source.split(/\s+/);
-      for (const className of classNames) {
+      for (const className of splitClassNames(source)) {
         styleRuleSet.push(
           ...StyleCollection.styles(className).get(state.ruleEffect),
         );
@@ -280,7 +297,7 @@ function pushInlineRule(
   item: any,
   styleRuleSet: StyleRule[],
 ) {
-  for (const className of item[INLINE_RULE_SYMBOL].split(/\s+/)) {
+  for (const className of splitClassNames(item[INLINE_RULE_SYMBOL])) {
     let inlineRuleSet = StyleCollection.styles(className).get(state.ruleEffect);
 
     for (let rule of inlineRuleSet) {
