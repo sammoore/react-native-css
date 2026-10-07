@@ -225,6 +225,21 @@ export function updateRules(
 
   pressable = activeFamily.has(state.ruleEffectGetter);
 
+  /**
+   * PERF: cache the interaction-family membership once per rule pass.
+   * `getStyledProps` reads these on every render; without this it performs
+   * four WeakMap lookups per config per render.
+   *
+   * The membership can only change while re-collecting rules (this function),
+   * so caching is safe: handlers only ever `set()` existing observables.
+   */
+  const interactions = (state.interactions = {
+    hover: hoverFamily.has(state.ruleEffectGetter),
+    active: pressable,
+    focus: focusFamily.has(state.ruleEffectGetter),
+    layout: containerLayoutFamily.has(state.ruleEffectGetter),
+  });
+
   if (!rules.size && !state.stylesObs && !inlineVariables.size) {
     return {
       ...state,
@@ -234,6 +249,7 @@ export function updateRules(
       pressable,
       variables,
       containers,
+      interactions,
     };
   }
 
@@ -279,6 +295,7 @@ export function updateRules(
     guards,
     animated,
     pressable,
+    interactions,
   };
 }
 
