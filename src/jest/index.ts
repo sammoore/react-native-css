@@ -21,7 +21,7 @@ export const testID = "react-native-css";
 beforeEach(() => {
   StyleCollection.styles.clear();
   dimensions.set(Dimensions.get("window"));
-  Appearance.setColorScheme("unspecified");
+  Appearance.setColorScheme("light");
   colorScheme.set(null);
 });
 
