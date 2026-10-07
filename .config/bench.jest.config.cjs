@@ -13,6 +13,12 @@
  * pinned to this package's copies. Without the pinning, a copy of the interop
  * installed elsewhere (e.g. another workspace) can resolve its own React,
  * which breaks hooks, or a different react-native, which skews results.
+ *
+ * With NODE_ENV=production, React's production builds are used. Production
+ * React has no act(), so `scheduler` is mapped to the mock scheduler, which
+ * bench/harness.ts flushes to commit renders synchronously. The Metro
+ * override guard (which throws outside NODE_ENV=test) is mapped to the empty
+ * module Metro substitutes in real apps.
  */
 const path = require("path");
 
@@ -26,9 +32,12 @@ const interopDir = process.env.BENCH_NW4_INTEROP
   ? path.resolve(process.env.BENCH_NW4_INTEROP)
   : undefined;
 
-let moduleNameMapper = jestExpo.moduleNameMapper;
+const production = process.env.NODE_ENV === "production";
+const reactDir = resolveDir("react");
+const schedulerDir = resolveDir("scheduler", reactDir);
+
+let moduleNameMapper = { ...jestExpo.moduleNameMapper };
 if (interopDir) {
-  const reactDir = resolveDir("react");
   const reactNativeDir = resolveDir("react-native");
   moduleNameMapper = {
     ...moduleNameMapper,
@@ -36,9 +45,16 @@ if (interopDir) {
     "^react/(.*)$": `${reactDir}/$1`,
     "^react-native$": reactNativeDir,
     "^react-native/(.*)$": `${reactNativeDir}/$1`,
-    "^scheduler$": resolveDir("scheduler", reactDir),
+    "^scheduler$": schedulerDir,
     "^react-native-css-interop$": interopDir,
     "^react-native-css-interop/(.*)$": `${interopDir}/$1`,
+  };
+}
+if (production) {
+  moduleNameMapper = {
+    ...moduleNameMapper,
+    "^scheduler$": path.join(schedulerDir, "unstable_mock.js"),
+    "react-native-css-metro-override$": "<rootDir>/src/metro/override.ts",
   };
 }
 

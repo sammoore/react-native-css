@@ -7,10 +7,39 @@
  * - BENCH_PROFILE: a directory; when set, each suite records an extra pass of
  *   its headline scenario under the V8 profiler and writes a .cpuprofile there.
  *   Profiling runs separately from the timed runs so it never skews them.
+ * - NODE_ENV=production: run against production React builds (see
+ *   .config/bench.jest.config.cjs). Dev React adds substantial overhead of
+ *   its own, which understates how much of the cost is the library's.
  */
 import { writeFileSync } from "fs";
 import { Session } from "inspector";
 import { join } from "path";
+
+import * as TestRenderer from "react-test-renderer";
+
+export const MODE =
+  process.env.NODE_ENV === "production" ? "production" : "development";
+
+/**
+ * Production React does not export act(). In production mode the bench config
+ * maps `scheduler` to the mock scheduler, so flushing it commits renders and
+ * runs effects synchronously instead.
+ */
+const Scheduler = (TestRenderer as any)._Scheduler;
+export const act: (fn: () => void) => void =
+  (TestRenderer as any).act ??
+  ((fn: () => void) => {
+    fn();
+    Scheduler.unstable_flushAllWithoutAsserting();
+  });
+
+if (MODE === "development") {
+  // Tell React this environment supports act(), as Testing Library does.
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+}
+
+export const create = TestRenderer.create;
+export type Renderer = TestRenderer.ReactTestRenderer;
 
 export const RUNS = Number(process.env.BENCH_RUNS ?? 10);
 export const WARMUP_RUNS = Number(process.env.BENCH_WARMUP ?? 3);
@@ -58,7 +87,9 @@ export function report(
   extra?: Record<string, unknown>,
 ) {
   // One JSON line per scenario so results are easy to grep and diff.
-  console.log(`BENCH ${JSON.stringify({ lib, scenario, ...stats, ...extra })}`);
+  console.log(
+    `BENCH ${JSON.stringify({ lib, mode: MODE, scenario, ...stats, ...extra })}`,
+  );
 }
 
 export async function profile(name: string, fn: () => void) {
@@ -77,7 +108,7 @@ export async function profile(name: string, fn: () => void) {
   fn();
   const { profile } = await post("Profiler.stop");
   session.disconnect();
-  const path = join(PROFILE_DIR, `${name}.cpuprofile`);
+  const path = join(PROFILE_DIR, `${name}-${MODE}.cpuprofile`);
   writeFileSync(path, JSON.stringify(profile));
   console.log(`BENCH profile written to ${path}`);
 }

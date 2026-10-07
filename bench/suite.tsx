@@ -11,9 +11,17 @@
 import type { ComponentType } from "react";
 import { Text as RNText, View as RNView, StyleSheet } from "react-native";
 
-import { render } from "@testing-library/react-native";
-
-import { measure, profile, report, RUNS, WARMUP_RUNS } from "./harness";
+import {
+  act,
+  create,
+  measure,
+  MODE,
+  profile,
+  report,
+  RUNS,
+  WARMUP_RUNS,
+  type Renderer,
+} from "./harness";
 
 export const ITEMS_COUNT = Number(process.env.BENCH_ITEMS ?? 1000);
 
@@ -138,9 +146,9 @@ const SCENARIOS: Scenario[] = [
 ];
 
 /** Sanity check: the first item actually received its resolved styles. */
-function expectStyled(api: ReturnType<typeof render>) {
-  const styles = api
-    .UNSAFE_getAllByProps({ testID: "item-0" })
+function expectStyled(renderer: Renderer) {
+  const styles = renderer.root
+    .findAll((node) => node.props.testID === "item-0")
     .map((node) => StyleSheet.flatten(node.props.style))
     .filter(Boolean);
   expect(styles).toContainEqual(
@@ -152,7 +160,7 @@ function expectStyled(api: ReturnType<typeof render>) {
 }
 
 export function runSuite(lib: BenchLibrary) {
-  describe(`${lib.name} (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
+  describe(`${lib.name}, ${MODE} (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
     for (const scenario of SCENARIOS) {
       test(scenario.name, async () => {
         lib.setup(CSS);
@@ -167,12 +175,17 @@ export function runSuite(lib: BenchLibrary) {
           />
         );
         const initial = lib.counters?.();
-        const api = render(element());
+        let renderer!: Renderer;
+        act(() => {
+          renderer = create(element());
+        });
         const firstRender = lib.counters?.();
         const step = () => {
           tick++;
           if (scenario.remount) renderKey++;
-          api.rerender(element());
+          act(() => {
+            renderer.update(element());
+          });
         };
 
         for (let i = 0; i < WARMUP_RUNS; i++) step();
@@ -193,7 +206,7 @@ export function runSuite(lib: BenchLibrary) {
         report(lib.name, scenario.name, stats, extra);
 
         if (scenario.mode !== "raw" && scenario.mode !== "unstyled") {
-          expectStyled(api);
+          expectStyled(renderer);
         }
 
         if (scenario === SCENARIOS[0]) {
@@ -202,7 +215,9 @@ export function runSuite(lib: BenchLibrary) {
           });
         }
 
-        api.unmount();
+        act(() => {
+          renderer.unmount();
+        });
       });
     }
   });
