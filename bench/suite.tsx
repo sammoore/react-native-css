@@ -7,8 +7,12 @@
  * variables via vars(), a header, and a container of ITEMS_COUNT item Views
  * (6 classes, one var() color), each with a Text child (3 classes, one var()
  * color).
+ *
+ * The targeted scenarios after it use flat trees of plain Views, each
+ * isolating one runtime path: className string caching, per-instance rule
+ * resolution, rule re-collection, interaction state and media queries.
  */
-import type { ComponentType } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { Text as RNText, View as RNView, StyleSheet } from "react-native";
 
 import {
@@ -49,6 +53,13 @@ export const CSS = `
   .justify-center { justify-content: center; }
   .text-typography { color: var(--color-typography); }
   .font-bold { font-weight: 700; }
+
+  /* Targeted scenarios */
+  .bg-solid { background-color: #ef4444; }
+  .active\\:opacity-50:active { opacity: 0.5; }
+  @media (min-width: 768px) { .md\\:flex-row { flex-direction: row; } }
+  /* One distinct rule per item, so no two items share a rule set */
+  ${Array.from({ length: ITEMS_COUNT }, (_, i) => `.u-${i} { margin-top: ${i}px; }`).join("\n  ")}
 `;
 
 export const THEME = {
@@ -125,33 +136,81 @@ function BenchApp({ lib, mode, renderKey, tick }: AppProps) {
   );
 }
 
-interface Scenario {
-  name: string;
-  mode: Mode;
-  /** remount swaps the container key each run; rerender keeps it. */
-  remount: boolean;
+/**
+ * Flat trees for the targeted scenarios: ITEMS_COUNT Views under a plain
+ * root, without the themed tree's variables or Text children, so each one
+ * isolates a single runtime path.
+ */
+function FlatApp({
+  lib,
+  className,
+  renderKey,
+}: {
+  lib: BenchLibrary;
+  className: (index: number) => string;
+  renderKey: number;
+}) {
+  const { View } = lib;
+  return (
+    <View key={renderKey}>
+      {Array.from({ length: ITEMS_COUNT }, (_, index) => (
+        <View
+          key={index}
+          testID={`item-${index}`}
+          className={className(index)}
+        />
+      ))}
+    </View>
+  );
 }
 
-const SCENARIOS: Scenario[] = [
-  { name: "remount", mode: "styled", remount: true },
-  {
-    name: "remount, stable inline style",
-    mode: "stable-inline",
-    remount: true,
-  },
-  { name: "rerender, same props", mode: "styled", remount: false },
-  { name: "rerender, new inline style", mode: "fresh-inline", remount: false },
-  { name: "remount, wrapped without classes", mode: "unstyled", remount: true },
-  { name: "remount, raw react-native", mode: "raw", remount: true },
-];
+interface RunState {
+  renderKey: number;
+  tick: number;
+}
 
-/** Sanity check: the first item actually received its resolved styles. */
-function expectStyled(renderer: Renderer) {
-  const styles = renderer.root
+interface Scenario {
+  name: string;
+  /**
+   * - remount: swap the container key, so the old tree unmounts after the new
+   *   one renders. Live components keep shared style observables alive, so
+   *   this measures the cached path.
+   * - rerender: update the same tree in place.
+   * - mount: unmount the previous tree, then mount a fresh one (both timed),
+   *   so nothing cached by live components carries over between runs.
+   */
+  kind: "remount" | "rerender" | "mount";
+  render: (lib: BenchLibrary, state: RunState) => ReactElement;
+  /** Sanity check that styles were applied. */
+  check?: (renderer: Renderer) => void;
+}
+
+function themed(mode: Mode) {
+  return (lib: BenchLibrary, { renderKey, tick }: RunState) => (
+    <BenchApp lib={lib} mode={mode} renderKey={renderKey} tick={tick} />
+  );
+}
+
+function flat(className: (index: number, state: RunState) => string) {
+  return (lib: BenchLibrary, state: RunState) => (
+    <FlatApp
+      lib={lib}
+      className={(index) => className(index, state)}
+      renderKey={state.renderKey}
+    />
+  );
+}
+
+/** The first item's flattened styles, across the wrapper and host nodes. */
+function firstItemStyles(renderer: Renderer) {
+  return renderer.root
     .findAll((node) => node.props.testID === "item-0")
     .map((node) => StyleSheet.flatten(node.props.style))
     .filter(Boolean);
-  expect(styles).toContainEqual(
+}
+
+function expectThemed(renderer: Renderer) {
+  expect(firstItemStyles(renderer)).toContainEqual(
     expect.objectContaining({
       borderRadius: 16,
       backgroundColor: THEME["--color-primary"],
@@ -159,21 +218,99 @@ function expectStyled(renderer: Renderer) {
   );
 }
 
+function expectPadded(renderer: Renderer) {
+  expect(firstItemStyles(renderer)).toContainEqual(
+    expect.objectContaining({ padding: 16 }),
+  );
+}
+
+const SCENARIOS: Scenario[] = [
+  {
+    name: "remount",
+    kind: "remount",
+    render: themed("styled"),
+    check: expectThemed,
+  },
+  {
+    name: "remount, stable inline style",
+    kind: "remount",
+    render: themed("stable-inline"),
+    check: expectThemed,
+  },
+  {
+    name: "rerender, same props",
+    kind: "rerender",
+    render: themed("styled"),
+    check: expectThemed,
+  },
+  {
+    name: "rerender, new inline style",
+    kind: "rerender",
+    render: themed("fresh-inline"),
+    check: expectThemed,
+  },
+  {
+    name: "remount, wrapped without classes",
+    kind: "remount",
+    render: themed("unstyled"),
+  },
+  { name: "remount, raw react-native", kind: "remount", render: themed("raw") },
+
+  // Targeted scenarios: each isolates one runtime path.
+  {
+    name: "mount, shared className",
+    kind: "mount",
+    render: flat(() => "p-4 rounded-2xl bg-solid"),
+    check: expectPadded,
+  },
+  {
+    // Same rules, but a distinct string per item: defeats caches keyed on the
+    // className string (e.g. the split cache) while still sharing rule sets.
+    name: "mount, unique className strings",
+    kind: "mount",
+    render: flat((index) => "p-4 rounded-2xl bg-solid" + " ".repeat(index + 1)),
+    check: expectPadded,
+  },
+  {
+    // A distinct rule set per item: no style observable can be shared, so
+    // every instance resolves its own declarations.
+    name: "mount, unique rule sets",
+    kind: "mount",
+    render: flat((index) => `p-4 rounded-2xl bg-solid u-${index}`),
+    check: expectPadded,
+  },
+  {
+    // Alternates between two rule sets in place, exercising updateRules.
+    name: "rerender, className toggles",
+    kind: "rerender",
+    render: flat((_, { tick }) =>
+      tick % 2 ? "p-4 rounded-2xl" : "p-4 bg-solid",
+    ),
+    check: expectPadded,
+  },
+  {
+    // Interaction state: attaches press handlers and makes Views pressable.
+    name: "mount, active: pseudo-class",
+    kind: "mount",
+    render: flat(() => "p-4 active:opacity-50"),
+    check: expectPadded,
+  },
+  {
+    // Media query: rule matching reads and subscribes to the window width.
+    name: "mount, media query",
+    kind: "mount",
+    render: flat(() => "p-4 md:flex-row"),
+    check: expectPadded,
+  },
+];
+
 export function runSuite(lib: BenchLibrary) {
   describe(`${lib.name}, ${MODE} (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
     for (const scenario of SCENARIOS) {
       test(scenario.name, async () => {
         lib.setup(CSS);
-        let renderKey = 0;
-        let tick = 0;
-        const element = () => (
-          <BenchApp
-            lib={lib}
-            mode={scenario.mode}
-            renderKey={renderKey}
-            tick={tick}
-          />
-        );
+        const state: RunState = { renderKey: 0, tick: 0 };
+        const element = () => scenario.render(lib, state);
         const initial = lib.counters?.();
         let renderer!: Renderer;
         act(() => {
@@ -181,11 +318,20 @@ export function runSuite(lib: BenchLibrary) {
         });
         const firstRender = lib.counters?.();
         const step = () => {
-          tick++;
-          if (scenario.remount) renderKey++;
-          act(() => {
-            renderer.update(element());
-          });
+          state.tick++;
+          if (scenario.kind === "remount") state.renderKey++;
+          if (scenario.kind === "mount") {
+            act(() => {
+              renderer.unmount();
+            });
+            act(() => {
+              renderer = create(element());
+            });
+          } else {
+            act(() => {
+              renderer.update(element());
+            });
+          }
         };
 
         for (let i = 0; i < WARMUP_RUNS; i++) step();
@@ -205,9 +351,7 @@ export function runSuite(lib: BenchLibrary) {
         }
         report(lib.name, scenario.name, stats, extra);
 
-        if (scenario.mode !== "raw" && scenario.mode !== "unstyled") {
-          expectStyled(renderer);
-        }
+        scenario.check?.(renderer);
 
         if (scenario === SCENARIOS[0]) {
           await profile(`${lib.name}-remount`, () => {
