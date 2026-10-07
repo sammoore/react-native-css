@@ -160,6 +160,28 @@ function filterCssVariables(value: any, depth = 0): any | undefined {
   return value;
 }
 
+/**
+ * PERF: `deepMergeConfig` re-filters the same inline `style` prop on every
+ * render. Inline style objects are treated as immutable (React/RN convention,
+ * and the same assumption v4 makes with its `opaqueStyles` WeakMap), so the
+ * filtered result can be cached by object identity. This turns a per-render
+ * deep clone into a single WeakMap lookup for the common case of a stable
+ * style object identity.
+ */
+const inlineStyleCache = new WeakMap<object, any>();
+function filterInlineStyle(style: any) {
+  if (style === null || typeof style !== "object") return style;
+  const cached = inlineStyleCache.get(style);
+  if (cached !== undefined) {
+    // `null` is the sentinel for "filters to nothing" (filterCssVariables
+    // returning undefined), since undefined means "not cached".
+    return cached === null ? undefined : cached;
+  }
+  const filtered = filterCssVariables(style);
+  inlineStyleCache.set(style, filtered === undefined ? null : filtered);
+  return filtered;
+}
+
 export const stylesFamily = family(
   (
     hash: string,
@@ -396,7 +418,7 @@ function deepMergeConfig(
         }
       } else if (rightIsInline && right?.style) {
         // Filter inline styles if rightIsInline is true
-        const filteredRightStyle = filterCssVariables(right.style);
+        const filteredRightStyle = filterInlineStyle(right.style);
 
         if (left?.style) {
           if (!filteredRightStyle) {
@@ -495,7 +517,7 @@ function deepMergeConfig(
     if (config.target.length === 1 && finalKey && rightIsInline) {
       let rightValue = right?.[finalKey];
       if (rightValue !== undefined) {
-        rightValue = filterCssVariables(rightValue);
+        rightValue = filterInlineStyle(rightValue);
       }
       if (rightValue === undefined || rightValue === null) {
         // Inline is empty or fully filtered — preserve className-computed value
@@ -544,7 +566,7 @@ function deepMergeConfig(
 
   // Strip any inline variables from the target
   if (rightIsInline && rightValue !== undefined) {
-    rightValue = filterCssVariables(rightValue);
+    rightValue = filterInlineStyle(rightValue);
   }
 
   if (rightValue !== undefined) {
