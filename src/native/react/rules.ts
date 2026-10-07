@@ -22,24 +22,6 @@ import type { ComponentState, Config } from "./useNativeCss";
 
 export const INLINE_RULE_SYMBOL = Symbol("react-native-css.inlineRule");
 
-/**
- * PERF: `className` strings are highly repetitive (e.g identical strings
- * across every row of a list), but `String.split` allocates a new array on
- * every call. `updateRules` runs on every mount and every guard-triggered
- * re-collection, so cache the split by string identity.
- */
-const classNameSplitCache = new Map<string, string[]>();
-function splitClassNames(source: string): string[] {
-  let classNames = classNameSplitCache.get(source);
-  if (classNames === undefined) {
-    classNames = source.split(/\s+/);
-    // Guard against unbounded growth when class names are dynamic
-    if (classNameSplitCache.size > 10_000) classNameSplitCache.clear();
-    classNameSplitCache.set(source, classNames);
-  }
-  return classNames;
-}
-
 export function updateRules(
   state: ComponentState,
   // Either update the state with new props or use the current props
@@ -49,7 +31,7 @@ export function updateRules(
   forceUpdate = false,
   isRerender = true,
 ): ComponentState {
-  cleanupEffect(state.ruleEffect, false);
+  cleanupEffect(state.ruleEffect);
   const guards: RenderGuard[] = [];
   const rules = new Set<StyleRule | InlineVariable | VariableContextValue>();
   if (forceUpdate) {
@@ -79,7 +61,8 @@ export function updateRules(
     const styleRuleSet = [];
 
     if (typeof source === "string") {
-      for (const className of splitClassNames(source)) {
+      const classNames = source.split(/\s+/);
+      for (const className of classNames) {
         styleRuleSet.push(
           ...StyleCollection.styles(className).get(state.ruleEffect),
         );
@@ -225,21 +208,6 @@ export function updateRules(
 
   pressable = activeFamily.has(state.ruleEffectGetter);
 
-  /**
-   * PERF: cache the interaction-family membership once per rule pass.
-   * `getStyledProps` reads these on every render; without this it performs
-   * four WeakMap lookups per config per render.
-   *
-   * The membership can only change while re-collecting rules (this function),
-   * so caching is safe: handlers only ever `set()` existing observables.
-   */
-  const interactions = (state.interactions = {
-    hover: hoverFamily.has(state.ruleEffectGetter),
-    active: pressable,
-    focus: focusFamily.has(state.ruleEffectGetter),
-    layout: containerLayoutFamily.has(state.ruleEffectGetter),
-  });
-
   if (!rules.size && !state.stylesObs && !inlineVariables.size) {
     return {
       ...state,
@@ -249,7 +217,6 @@ export function updateRules(
       pressable,
       variables,
       containers,
-      interactions,
     };
   }
 
@@ -295,7 +262,6 @@ export function updateRules(
     guards,
     animated,
     pressable,
-    interactions,
   };
 }
 
@@ -314,7 +280,7 @@ function pushInlineRule(
   item: any,
   styleRuleSet: StyleRule[],
 ) {
-  for (const className of splitClassNames(item[INLINE_RULE_SYMBOL])) {
+  for (const className of item[INLINE_RULE_SYMBOL].split(/\s+/)) {
     let inlineRuleSet = StyleCollection.styles(className).get(state.ruleEffect);
 
     for (let rule of inlineRuleSet) {

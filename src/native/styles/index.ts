@@ -160,28 +160,6 @@ function filterCssVariables(value: any, depth = 0): any | undefined {
   return value;
 }
 
-/**
- * PERF: `deepMergeConfig` re-filters the same inline `style` prop on every
- * render. Inline style objects are treated as immutable (React/RN convention,
- * and the same assumption v4 makes with its `opaqueStyles` WeakMap), so the
- * filtered result can be cached by object identity. This turns a per-render
- * deep clone into a single WeakMap lookup for the common case of a stable
- * style object identity.
- */
-const inlineStyleCache = new WeakMap<object, any>();
-function filterInlineStyle(style: any) {
-  if (style === null || typeof style !== "object") return style;
-  const cached = inlineStyleCache.get(style);
-  if (cached !== undefined) {
-    // `null` is the sentinel for "filters to nothing" (filterCssVariables
-    // returning undefined), since undefined means "not cached".
-    return cached === null ? undefined : cached;
-  }
-  const filtered = filterCssVariables(style);
-  inlineStyleCache.set(style, filtered === undefined ? null : filtered);
-  return filtered;
-}
-
 export const stylesFamily = family(
   (
     hash: string,
@@ -217,29 +195,18 @@ export function getStyledProps(
 
   const styledProps = state.stylesObs?.get(state.styleEffect);
 
-  /**
-   * PERF: `updateRules` caches the interaction-family membership on the
-   * state. Fall back to the (cacheable) WeakMap lookups only if a state
-   * somehow reached render without a rule pass.
-   */
-  const interactions = (state.interactions ??= {
-    hover: hoverFamily.has(state.ruleEffectGetter),
-    active: activeFamily.has(state.ruleEffectGetter),
-    focus: focusFamily.has(state.ruleEffectGetter),
-    layout: containerLayoutFamily.has(state.ruleEffectGetter),
-  });
-
   // Each config merges a complete props object. Preserve its full target path
   // before the next config merges unrelated inline props over that object.
   const computedTargets: { path: string[]; value: unknown }[] = [];
   const consumedSources: string[] = [];
 
   for (const config of state.configs) {
-    // PERF: hoist the computed (left) props once per config. `left` is also
-    // the signal for whether this config contributed computed styles, which
-    // gates the `computedTargets` bookkeeping below.
-    const left = nativeStyleMapping(config, adaptProps(styledProps?.normal));
-    result = deepMergeConfig(config, left, inline, true);
+    result = deepMergeConfig(
+      config,
+      nativeStyleMapping(config, adaptProps(styledProps?.normal)),
+      inline,
+      true,
+    );
 
     if (styledProps?.important) {
       result = deepMergeConfig(
@@ -249,7 +216,7 @@ export function getStyledProps(
       );
     }
 
-    if (left && result && config.target) {
+    if (result && config.target) {
       const path = Array.isArray(config.target)
         ? config.target
         : [config.target];
@@ -267,7 +234,7 @@ export function getStyledProps(
     }
 
     // Apply the handlers
-    if (interactions.hover) {
+    if (hoverFamily.has(state.ruleEffectGetter)) {
       result ??= {};
       result.onHoverIn = getInteractionHandler(
         state.ruleEffectGetter,
@@ -281,7 +248,7 @@ export function getStyledProps(
       );
     }
 
-    if (interactions.active) {
+    if (activeFamily.has(state.ruleEffectGetter)) {
       result ??= {};
       result.onPress = getInteractionHandler(
         state.ruleEffectGetter,
@@ -300,7 +267,7 @@ export function getStyledProps(
       );
     }
 
-    if (interactions.focus) {
+    if (focusFamily.has(state.ruleEffectGetter)) {
       result ??= {};
       result.onBlur = getInteractionHandler(
         state.ruleEffectGetter,
@@ -314,7 +281,7 @@ export function getStyledProps(
       );
     }
 
-    if (interactions.layout) {
+    if (containerLayoutFamily.has(state.ruleEffectGetter)) {
       result ??= {};
       result.onLayout = getInteractionHandler(
         state.ruleEffectGetter,
@@ -368,13 +335,7 @@ function mergeDefinedProps(
   left: Record<string, any> | undefined,
   right: Record<string, any>,
 ) {
-  // PERF: with no computed (left) styles there is nothing for undefined or
-  // empty-object values to clobber — a plain copy is equivalent and skips
-  // the per-key typeof checks below.
-  if (!left) {
-    return { ...right };
-  }
-  const result = { ...left };
+  const result = left ? { ...left } : {};
   for (const key in right) {
     const value = right[key];
     if (value === undefined) continue;
@@ -423,7 +384,7 @@ function deepMergeConfig(
         }
       } else if (rightIsInline && right?.style) {
         // Filter inline styles if rightIsInline is true
-        const filteredRightStyle = filterInlineStyle(right.style);
+        const filteredRightStyle = filterCssVariables(right.style);
 
         if (left?.style) {
           if (!filteredRightStyle) {
@@ -522,7 +483,7 @@ function deepMergeConfig(
     if (config.target.length === 1 && finalKey && rightIsInline) {
       let rightValue = right?.[finalKey];
       if (rightValue !== undefined) {
-        rightValue = filterInlineStyle(rightValue);
+        rightValue = filterCssVariables(rightValue);
       }
       if (rightValue === undefined || rightValue === null) {
         // Inline is empty or fully filtered — preserve className-computed value
@@ -571,7 +532,7 @@ function deepMergeConfig(
 
   // Strip any inline variables from the target
   if (rightIsInline && rightValue !== undefined) {
-    rightValue = filterInlineStyle(rightValue);
+    rightValue = filterCssVariables(rightValue);
   }
 
   if (rightValue !== undefined) {

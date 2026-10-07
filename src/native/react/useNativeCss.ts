@@ -57,19 +57,6 @@ export type ComponentState = {
 
   animated?: boolean;
   pressable?: undefined | boolean;
-
-  /**
-   * PERF: which interaction handlers this component must attach. Mirrors the
-   * `hoverFamily/activeFamily/focusFamily/containerLayoutFamily` membership
-   * of `ruleEffectGetter`, computed once per `updateRules` pass instead of
-   * doing four WeakMap lookups on every render.
-   */
-  interactions?: {
-    hover: boolean;
-    active: boolean;
-    focus: boolean;
-    layout: boolean;
-  };
 };
 
 /**
@@ -126,7 +113,7 @@ export function useNativeCss(
     // the component commits instead of retaining an abandoned initializer.
     // cleanupEffect records the dependency set on the effect so the commit
     // effect below can replay subscriptions without a full rule re-pass.
-    cleanupEffect(ruleEffect, true);
+    cleanupEffect(ruleEffect);
     return initialState;
   });
 
@@ -160,11 +147,8 @@ export function useNativeCss(
     }
     hasCommittedRef.current = true;
     return () => {
-      // PERF: snapshots are only consumed by the fresh-mount reconnect path
-      // above, which has already run (or will never run) by the time React
-      // invokes this cleanup (unmount, StrictMode or <Activity> replay).
-      cleanupEffect(state.ruleEffect, false);
-      cleanupEffect(state.styleEffect, false);
+      cleanupEffect(state.ruleEffect);
+      cleanupEffect(state.styleEffect);
     };
   }, [state.ruleEffect, state.styleEffect]);
 
