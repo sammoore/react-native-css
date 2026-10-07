@@ -62,10 +62,23 @@ const round = (n: number) => Math.round(n * 100) / 100;
  */
 const now = () => Number(process.hrtime.bigint()) / 1e6;
 
-export function measure(fn: () => void, runs = RUNS, warmup = WARMUP_RUNS) {
-  for (let i = 0; i < warmup; i++) fn();
+/**
+ * Time `fn` over `runs` iterations after `warmup` untimed ones. `prepare`, if
+ * given, runs untimed before every iteration (e.g. to build fresh input).
+ */
+export function measure(
+  fn: () => void,
+  runs = RUNS,
+  warmup = WARMUP_RUNS,
+  prepare?: () => void,
+) {
+  for (let i = 0; i < warmup; i++) {
+    prepare?.();
+    fn();
+  }
   const times: number[] = [];
   for (let i = 0; i < runs; i++) {
+    prepare?.();
     const start = now();
     fn();
     times.push(now() - start);
