@@ -235,9 +235,10 @@ export function getStyledProps(
   const consumedSources: string[] = [];
 
   for (const config of state.configs) {
-    // PERF: hoist the computed (left) props once per config. `left` is also
-    // the signal for whether this config contributed computed styles, which
-    // gates the `computedTargets` bookkeeping below.
+    // PERF: hoist the computed (left) props once per config. Normal or
+    // important computed props are the signal for whether this config
+    // contributed computed styles, which gates the `computedTargets`
+    // bookkeeping below.
     const left = nativeStyleMapping(config, adaptProps(styledProps?.normal));
     result = deepMergeConfig(config, left, inline, true);
 
@@ -249,7 +250,7 @@ export function getStyledProps(
       );
     }
 
-    if (left && result && config.target) {
+    if ((left || styledProps?.important) && result && config.target) {
       const path = Array.isArray(config.target)
         ? config.target
         : [config.target];
