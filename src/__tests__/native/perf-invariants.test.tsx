@@ -2,7 +2,7 @@
 /**
  * Behavioral invariants that runtime caching optimizations must preserve.
  */
-import { View as RNView } from "react-native";
+import { Appearance, View as RNView } from "react-native";
 
 import { act, fireEvent, render, screen } from "@testing-library/react-native";
 import { ScrollView } from "react-native-css/components/ScrollView";
@@ -119,6 +119,28 @@ test("color scheme changed while unmounted applies on remount", () => {
   render(<View testID={testID} className="themed" />);
   expect(screen.getByTestId(testID).props.style).toStrictEqual({
     color: "red",
+  });
+});
+
+test("set('light') forces light mode over a dark system scheme", () => {
+  registerCSS(`
+.x { color: blue; }
+@media (prefers-color-scheme: light) { .x { color: green; } }
+@media (prefers-color-scheme: dark) { .x { color: red; } }`);
+  act(() => {
+    Appearance.setColorScheme("dark");
+    colorScheme.set("dark");
+  });
+  render(<View testID={testID} className="x" />);
+  expect(screen.getByTestId(testID).props.style).toStrictEqual({
+    color: "#f00",
+  });
+  act(() => {
+    colorScheme.set("light");
+  });
+  expect(colorScheme.get()).toBe("light");
+  expect(screen.getByTestId(testID).props.style).toStrictEqual({
+    color: "#008000",
   });
 });
 
@@ -240,6 +262,23 @@ test("multi-config: empty/undefined inline props with no classes don't clobber a
   const props = screen.getByTestId(testID).props;
   expect(props.className).toBeUndefined();
   expect(props.contentContainerClassName).toBeUndefined();
+});
+
+test("multi-config: inline style survives when every class is !important", () => {
+  registerCSS(`
+.bg { background-color: red !important; }
+.cc { padding: 2px !important; }`);
+  render(
+    <ScrollView
+      testID={testID}
+      className="bg"
+      style={{ margin: 4 }}
+      contentContainerClassName="cc"
+    />,
+  );
+  const props = screen.getByTestId(testID).props;
+  expect(props.style).toStrictEqual({ margin: 4, backgroundColor: "#f00" });
+  expect(props.contentContainerStyle).toStrictEqual({ padding: 2 });
 });
 
 /* ---------------------------------------------------------------------------
