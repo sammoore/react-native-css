@@ -68,7 +68,7 @@ export const colorScheme: ColorScheme = {
     return Appearance.getColorScheme();
   },
   set(name) {
-    Appearance.setColorScheme(name ?? "unspecified");
+    Appearance.setColorScheme(name ?? "light");
   },
 };
 
