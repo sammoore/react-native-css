@@ -18,7 +18,8 @@
  * React has no act(), so `scheduler` is mapped to the mock scheduler, which
  * bench/harness.ts flushes to commit renders synchronously. The Metro
  * override guard (which throws outside NODE_ENV=test) is mapped to the empty
- * module Metro substitutes in real apps.
+ * module Metro substitutes in real apps. bench/setup.ts sets __DEV__ to false,
+ * which React Native's jest setup otherwise forces to true.
  */
 const os = require("os");
 const path = require("path");
@@ -78,6 +79,7 @@ module.exports = {
   roots: ["<rootDir>/bench"],
   testMatch: ["**/*.bench.tsx"],
   testPathIgnorePatterns: ["dist/"],
+  setupFiles: [...(jestExpo.setupFiles ?? []), "<rootDir>/bench/setup.ts"],
   // Run suites one at a time so nw4 and nw5 don't compete for CPU.
   maxWorkers: 1,
   moduleNameMapper,
