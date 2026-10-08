@@ -11,9 +11,9 @@
  *   .config/bench.jest.config.cjs). Dev React adds substantial overhead of
  *   its own, which understates how much of the cost is the library's.
  */
-import { writeFileSync } from "fs";
+import { appendFileSync, writeFileSync } from "fs";
 import { Session } from "inspector";
-import { join } from "path";
+import { basename, join } from "path";
 
 import * as TestRenderer from "react-test-renderer";
 
@@ -93,16 +93,36 @@ export function measure(
   } satisfies Stats;
 }
 
+/**
+ * Record one scenario's result. Every result is appended to
+ * BENCH_RESULTS_FILE (set by the bench config), from which a summary is
+ * printed when the run finishes (see summary.cjs). When summaries are off,
+ * e.g. when output is piped, each result is also logged as a `BENCH {...}`
+ * JSON line, so results are easy to grep and diff.
+ */
 export function report(
   lib: string,
   scenario: string,
   stats: Stats,
   extra?: Record<string, unknown>,
 ) {
-  // One JSON line per scenario so results are easy to grep and diff.
-  console.log(
-    `BENCH ${JSON.stringify({ lib, mode: MODE, scenario, ...stats, ...extra })}`,
-  );
+  const result = {
+    file: basename(expect.getState().testPath ?? ""),
+    lib,
+    mode: MODE,
+    scenario,
+    ...stats,
+    ...extra,
+  };
+  if (process.env.BENCH_RESULTS_FILE) {
+    appendFileSync(
+      process.env.BENCH_RESULTS_FILE,
+      `${JSON.stringify(result)}\n`,
+    );
+  }
+  if (process.env.BENCH_SUMMARY !== "1") {
+    console.log(`BENCH ${JSON.stringify(result)}`);
+  }
 }
 
 export async function profile(name: string, fn: () => void) {

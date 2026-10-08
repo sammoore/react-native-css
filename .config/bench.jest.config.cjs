@@ -20,6 +20,7 @@
  * override guard (which throws outside NODE_ENV=test) is mapped to the empty
  * module Metro substitutes in real apps.
  */
+const os = require("os");
 const path = require("path");
 
 const jestExpo = require("jest-expo/jest-preset");
@@ -58,6 +59,19 @@ if (production) {
   };
 }
 
+// Results are collected in a file and summarized when the run finishes (see
+// bench/summary.cjs). `yarn bench` (bench/run.cjs) provides its own file and
+// prints one summary for both React modes; otherwise this run owns the file
+// and its reporter prints the summary. Test workers inherit these variables.
+const ownsResults = !process.env.BENCH_RESULTS_FILE;
+process.env.BENCH_RESULTS_FILE ??= path.join(
+  os.tmpdir(),
+  `react-native-css-bench-${process.pid}.jsonl`,
+);
+const { shouldSummarize } = require("../bench/summary.cjs");
+const summary = shouldSummarize(process.env, process.stdout);
+process.env.BENCH_SUMMARY = summary ? "1" : "0";
+
 module.exports = {
   ...jestExpo,
   rootDir,
@@ -67,4 +81,15 @@ module.exports = {
   // Run suites one at a time so nw4 and nw5 don't compete for CPU.
   maxWorkers: 1,
   moduleNameMapper,
+  reporters: [
+    "default",
+    [
+      "<rootDir>/bench/reporter.cjs",
+      {
+        resultsFile: process.env.BENCH_RESULTS_FILE,
+        owner: ownsResults,
+        summary,
+      },
+    ],
+  ],
 };

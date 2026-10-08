@@ -31,13 +31,27 @@ BENCH_NW4_INTEROP=/path/to/node_modules/react-native-css-interop yarn bench
 | `BENCH_CSS`         | `plain` | Suite stylesheet: `plain` or `tailwind`                |
 | `BENCH_NW4_INTEROP` | unset   | Path to react-native-css-interop; enables the v4 suite |
 | `BENCH_PROFILE`     | unset   | Directory to write `.cpuprofile` files to              |
+| `BENCH_SUMMARY`     | auto    | `1` or `0` to force the end-of-run summary on or off   |
 
-To run a single file, call a mode directly, e.g.
-`yarn bench:prod bench/group.bench.tsx`. `yarn bench` only forwards extra
-arguments to its second (production) pass.
+Extra arguments are passed to jest, e.g. `yarn bench bench/group.bench.tsx`
+runs one file in both modes.
 
-Each result is one `BENCH {...}` JSON line, labelled with the library, React
-mode and, for the suite, the stylesheet.
+## Output
+
+In an interactive terminal, results are collected and printed as one summary
+at the end of the run: a table per React mode and stylesheet or benchmark
+file, with the median and (min–max) in ms. When v4 also ran, a `nw5/nw4`
+column compares the two (below 1× means v5 is faster). `yarn bench` prints a
+single summary covering both modes.
+
+When output isn't a terminal (piped, or CI), each result is instead printed
+as it happens, as one `BENCH {...}` JSON line labelled with the library, React
+mode and, for the suite, the stylesheet. `BENCH_SUMMARY` overrides the choice.
+
+How it works: `harness.ts` appends each result to a temporary file
+(`BENCH_RESULTS_FILE`), and the jest reporter (`reporter.cjs`), or the `yarn
+bench` runner (`run.cjs`) for both modes, formats it with `summary.cjs` once
+everything has finished.
 
 ## The suite (`nw5.bench.tsx`, `nw4.bench.tsx`)
 
