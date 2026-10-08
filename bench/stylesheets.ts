@@ -13,7 +13,7 @@
  * Both define every class the suite uses, so results are directly
  * comparable between them.
  */
-import { buildTailwindCss } from "./tailwind";
+import { buildTailwindCss, largeClassList } from "./tailwind";
 
 export type StylesheetName = "plain" | "tailwind";
 
@@ -136,4 +136,72 @@ export async function loadStylesheet(
     // --radius-2xl is 1rem.
     expected: (rem) => ({ padding: 4 * 0.25 * rem, borderRadius: 1 * rem }),
   };
+}
+
+/** Escape a class name for use in a CSS selector. */
+const selector = (className: string) =>
+  "." + className.replace(/[:[\]%.\/]/g, (char) => `\\${char}`);
+
+/** A stable hex color derived from a class name. */
+function colorFor(className: string) {
+  let hash = 0;
+  for (const char of className) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return `#${(hash & 0xffffff).toString(16).padStart(6, "0")}`;
+}
+
+const SPACING: Record<string, string[]> = {
+  p: ["padding"],
+  px: ["padding-left", "padding-right"],
+  py: ["padding-top", "padding-bottom"],
+  pt: ["padding-top"],
+  pb: ["padding-bottom"],
+  m: ["margin"],
+  mx: ["margin-left", "margin-right"],
+  my: ["margin-top", "margin-bottom"],
+  mt: ["margin-top"],
+  mb: ["margin-bottom"],
+  gap: ["gap"],
+  w: ["width"],
+  h: ["height"],
+};
+
+const COLOR_PROPERTIES: Record<string, string> = {
+  bg: "background-color",
+  text: "color",
+  border: "border-color",
+};
+
+/** A plain rule for one of largeClassList()'s classes. */
+function plainRule(className: string) {
+  const dark = className.startsWith("dark:");
+  const name = dark ? className.slice("dark:".length) : className;
+  const [prefix, ...rest] = name.split("-");
+  let declarations: string;
+
+  if (prefix && COLOR_PROPERTIES[prefix] && rest.length === 2) {
+    declarations = `${COLOR_PROPERTIES[prefix]}: ${colorFor(className)};`;
+  } else if (prefix && SPACING[prefix] && rest.length === 1) {
+    const px = Number(rest[0]) * 4;
+    declarations = SPACING[prefix].map((p) => `${p}: ${px}px;`).join(" ");
+  } else {
+    // Miscellaneous layout and typography utilities: any static declaration
+    // serves for measuring load cost.
+    declarations = "opacity: 0.5;";
+  }
+
+  const rule = `${selector(className)} { ${declarations} }`;
+  return dark ? `@media (prefers-color-scheme: dark) { ${rule} }` : rule;
+}
+
+/**
+ * A large stylesheet for the startup benchmark: about 2,000 classes, as
+ * plain CSS or Tailwind output depending on BENCH_CSS.
+ */
+export async function loadLargeStylesheet() {
+  const classes = largeClassList();
+  const css =
+    STYLESHEET === "plain"
+      ? classes.map(plainRule).join("\n")
+      : await buildTailwindCss(classes);
+  return { name: STYLESHEET, css, classes: classes.length };
 }

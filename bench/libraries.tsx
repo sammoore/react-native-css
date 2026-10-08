@@ -9,6 +9,7 @@
  *   the JS engine would when loading the bundle) and returns load(), which
  *   performs what the app does when that module runs at startup: handing the
  *   stylesheet to the runtime. load() is what the startup benchmark times.
+ * - reset(): clears the runtime's styles, as before the app launches.
  *
  * Optional libraries are only required when enabled, so their packages don't
  * need to be installed otherwise.
@@ -43,6 +44,7 @@ export interface BenchLibrary {
   rem: number;
   build(css: string): Promise<string>;
   instantiate(artifact: string): () => void;
+  reset(): void;
   /** Optional cumulative call counters, reported per timed run. */
   counters?: () => Record<string, number>;
 }
@@ -88,6 +90,10 @@ export function nw5(): LibraryResult {
       const data = JSON.parse(artifact);
       return () => StyleCollection.inject(data);
     },
+    reset: () => {
+      StyleCollection.styles.clear();
+      StyleCollection.keyframes.clear();
+    },
     counters: () => ({ calculateProps: calculatePropsCalls }),
   };
 }
@@ -116,6 +122,7 @@ export function nw4(): LibraryResult {
   } = require("react-native-css-interop/dist/css-to-rn");
   const {
     injectData,
+    resetData,
   } = require("react-native-css-interop/dist/runtime/native/styles");
 
   const View = interop.cssInterop(RNView, { className: "style" });
@@ -133,6 +140,7 @@ export function nw4(): LibraryResult {
       const data = JSON.parse(artifact);
       return () => injectData(data);
     },
+    reset: resetData,
   };
 }
 
