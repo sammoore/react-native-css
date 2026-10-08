@@ -25,18 +25,20 @@ export const STYLESHEET: StylesheetName = (() => {
   return name;
 })();
 
+export interface Expected {
+  padding: number;
+  borderRadius: number;
+}
+
 export interface Stylesheet {
   name: StylesheetName;
   css: string;
-  /** Resolved values the suite's sanity checks expect. */
-  expected: { padding: number; borderRadius: number };
+  /**
+   * Resolved values the suite's sanity checks expect, given the library's
+   * pixels per rem (Tailwind sizes are rem-based; plain CSS uses px).
+   */
+  expected: (rem: number) => Expected;
 }
-
-/**
- * react-native-css's default rem when the stylesheet doesn't set one
- * (compiler option inlineRem).
- */
-const REM = 14;
 
 /** A class that matches one distinct rule per item (see "unique rule sets"). */
 export const uniqueClass = (index: number) => `mt-[${index}px]`;
@@ -114,7 +116,7 @@ export async function loadStylesheet(
     return {
       name: "plain",
       css: plainCss(itemsCount),
-      expected: { padding: 16, borderRadius: 16 },
+      expected: () => ({ padding: 16, borderRadius: 16 }),
     };
   }
 
@@ -128,6 +130,6 @@ export async function loadStylesheet(
     css: await buildTailwindCss([...classes], TAILWIND_THEME),
     // Tailwind's theme: --spacing is 0.25rem (p-4 is 4 × spacing) and
     // --radius-2xl is 1rem.
-    expected: { padding: 4 * 0.25 * REM, borderRadius: 1 * REM },
+    expected: (rem) => ({ padding: 4 * 0.25 * rem, borderRadius: 1 * rem }),
   };
 }

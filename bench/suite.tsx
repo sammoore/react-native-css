@@ -4,7 +4,7 @@
  * each one renders exactly the same components, classes and CSS.
  *
  * The tree mirrors the on-device benchmark app: a root View providing CSS
- * variables via vars(), a header, and a container of ITEMS_COUNT item Views
+ * variables (each library's ThemedView), a header, and a container of ITEMS_COUNT item Views
  * (6 classes, one var() color), each with a Text child (3 classes, one var()
  * color).
  *
@@ -16,7 +16,7 @@
  * rendered here is listed in CLASSES, so the Tailwind build generates exactly
  * those utilities.
  */
-import type { ComponentType, ReactElement } from "react";
+import type { ReactElement } from "react";
 import { Text as RNText, View as RNView, StyleSheet } from "react-native";
 
 import {
@@ -30,20 +30,16 @@ import {
   WARMUP_RUNS,
   type Renderer,
 } from "./harness";
+import { THEME, type BenchLibrary } from "./libraries";
 import {
   loadStylesheet,
   STYLESHEET,
   uniqueClass,
+  type Expected,
   type Stylesheet,
 } from "./stylesheets";
 
 export const ITEMS_COUNT = Number(process.env.BENCH_ITEMS ?? 1000);
-
-export const THEME = {
-  "--color-primary": "#00a8ff",
-  "--color-gray": "#f0f0f0",
-  "--color-typography": "#000000",
-};
 
 /** Every class string the suite renders, apart from uniqueClass(index). */
 const CLASSES = {
@@ -61,18 +57,6 @@ const CLASSES = {
 };
 const STABLE_INLINE = { marginTop: 1, opacity: 0.9 };
 
-export interface BenchLibrary {
-  name: string;
-  View: ComponentType<any>;
-  Text: ComponentType<any>;
-  /** The vars() result for THEME. */
-  themeVars: object;
-  /** Register CSS with the runtime. Called at the start of every scenario. */
-  setup(css: string): void;
-  /** Optional cumulative call counters, reported per timed run. */
-  counters?: () => Record<string, number>;
-}
-
 type Mode = "styled" | "stable-inline" | "fresh-inline" | "unstyled" | "raw";
 
 interface AppProps {
@@ -87,6 +71,7 @@ function BenchApp({ lib, mode, renderKey, tick }: AppProps) {
   const unstyled = raw || mode === "unstyled";
   const View = raw ? RNView : lib.View;
   const Text = raw ? RNText : lib.Text;
+  const Root = unstyled ? View : lib.ThemedView;
   const cls = (className: string) => (unstyled ? undefined : className);
   const itemStyle =
     mode === "stable-inline"
@@ -96,10 +81,7 @@ function BenchApp({ lib, mode, renderKey, tick }: AppProps) {
         : undefined;
 
   return (
-    <View
-      style={unstyled ? undefined : lib.themeVars}
-      className={cls(CLASSES.root)}
-    >
+    <Root className={cls(CLASSES.root)}>
       <View className={cls(CLASSES.header)}>
         <Text className={cls(CLASSES.title)}>Benchmark</Text>
       </View>
@@ -115,7 +97,7 @@ function BenchApp({ lib, mode, renderKey, tick }: AppProps) {
           </View>
         ))}
       </View>
-    </View>
+    </Root>
   );
 }
 
@@ -165,7 +147,7 @@ interface Scenario {
   kind: "remount" | "rerender" | "mount";
   render: (lib: BenchLibrary, state: RunState) => ReactElement;
   /** Sanity check that styles were applied. */
-  check?: (renderer: Renderer, expected: Stylesheet["expected"]) => void;
+  check?: (renderer: Renderer, expected: Expected) => void;
 }
 
 function themed(mode: Mode) {
@@ -192,9 +174,21 @@ function firstItemStyles(renderer: Renderer) {
     .filter(Boolean);
 }
 
-/** Rounded, and colored by the vars() on the root View. */
-function expectThemed(renderer: Renderer, expected: Stylesheet["expected"]) {
-  expect(firstItemStyles(renderer)).toContainEqual(
+/**
+ * The parts of a style the checks compare. Libraries may emit shorthands
+ * (padding) or longhands (paddingTop, ...), so read either.
+ */
+function summarize(style: Record<string, any>) {
+  return {
+    padding: style.padding ?? style.paddingTop,
+    borderRadius: style.borderRadius ?? style.borderTopLeftRadius,
+    backgroundColor: style.backgroundColor,
+  };
+}
+
+/** Rounded, and colored by the variables the root View provides. */
+function expectThemed(renderer: Renderer, expected: Expected) {
+  expect(firstItemStyles(renderer).map(summarize)).toContainEqual(
     expect.objectContaining({
       borderRadius: expected.borderRadius,
       backgroundColor: THEME["--color-primary"],
@@ -202,8 +196,8 @@ function expectThemed(renderer: Renderer, expected: Stylesheet["expected"]) {
   );
 }
 
-function expectPadded(renderer: Renderer, expected: Stylesheet["expected"]) {
-  expect(firstItemStyles(renderer)).toContainEqual(
+function expectPadded(renderer: Renderer, expected: Expected) {
+  expect(firstItemStyles(renderer).map(summarize)).toContainEqual(
     expect.objectContaining({ padding: expected.padding }),
   );
 }
@@ -291,13 +285,15 @@ const SCENARIOS: Scenario[] = [
 export function runSuite(lib: BenchLibrary) {
   describe(`${lib.name}, ${MODE}, ${STYLESHEET} CSS (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
     let stylesheet: Stylesheet;
+    let artifact: string;
     beforeAll(async () => {
       stylesheet = await loadStylesheet(Object.values(CLASSES), ITEMS_COUNT);
+      artifact = await lib.build(stylesheet.css);
     }, 120_000);
 
     for (const scenario of SCENARIOS) {
       test(scenario.name, async () => {
-        lib.setup(stylesheet.css);
+        lib.instantiate(artifact)();
         const state: RunState = { renderKey: 0, tick: 0 };
         const element = () => scenario.render(lib, state);
         const initial = lib.counters?.();
@@ -340,7 +336,7 @@ export function runSuite(lib: BenchLibrary) {
         }
         report(lib.name, scenario.name, stats, extra);
 
-        scenario.check?.(renderer, stylesheet.expected);
+        scenario.check?.(renderer, stylesheet.expected(lib.rem));
 
         if (scenario === SCENARIOS[0]) {
           await profile(`${lib.name}-${stylesheet.name}-remount`, () => {
