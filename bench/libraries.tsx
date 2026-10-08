@@ -21,6 +21,7 @@ import {
   View as RNView,
 } from "react-native";
 
+import { reportSkipped } from "./harness";
 import { STYLESHEET, type StylesheetSource } from "./stylesheets";
 
 /** CSS variables the suite provides on its root, and their values. */
@@ -109,7 +110,7 @@ export function nw4(): LibraryResult {
   if (STYLESHEET === "tailwind") {
     return {
       name: "nw4",
-      skip: "NativeWind v4 uses Tailwind CSS v3; BENCH_CSS=tailwind excludes it",
+      skip: "NativeWind v4 uses Tailwind CSS v3, so BENCH_CSS=tailwind excludes it",
     };
   }
   if (!process.env.BENCH_NW4_INTEROP) {
@@ -193,6 +194,7 @@ export function withLibrary(
   define: (lib: BenchLibrary) => void,
 ) {
   if ("skip" in result) {
+    reportSkipped(result.name, result.skip);
     test.skip(`${result.name} (${result.skip})`, () => {});
   } else {
     define(result);

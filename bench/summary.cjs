@@ -196,6 +196,16 @@ function formatSection(title, results, style) {
   ].join("\n");
 }
 
+/** One line per skipped library and reason, or "" when none were skipped. */
+function formatSkipped(results, style) {
+  const reasons = new Map();
+  for (const r of results) {
+    if (r.skipped) reasons.set(`${r.lib} (${r.skipped})`, true);
+  }
+  if (reasons.size === 0) return "";
+  return style.dim(`Skipped: ${[...reasons.keys()].join("; ")}`);
+}
+
 /**
  * Format all results: one heading per React mode, then one section per
  * stylesheet or benchmark file.
@@ -206,7 +216,8 @@ function formatSection(title, results, style) {
 function formatSummary(results, { color = false } = {}) {
   if (results.length === 0) return "";
   const style = styles(color);
-  const runs = Math.max(...results.map((r) => r.runs.length));
+  const timed = results.filter((r) => !r.skipped);
+  const runs = Math.max(0, ...timed.map((r) => r.runs.length));
 
   const modes = [...groupBy(results, (r) => r.mode)].map(
     ([mode, modeResults]) =>
@@ -214,10 +225,16 @@ function formatSummary(results, { color = false } = {}) {
         style.cyan(
           style.bold(`${mode[0].toUpperCase()}${mode.slice(1)} React`),
         ),
-        ...[...groupBy(modeResults, sectionTitle)].map(([title, section]) =>
-          formatSection(title, section, style),
-        ),
-      ].join("\n\n"),
+        ...[
+          ...groupBy(
+            timed.filter((r) => r.mode === mode),
+            sectionTitle,
+          ),
+        ].map(([title, section]) => formatSection(title, section, style)),
+        formatSkipped(modeResults, style),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
   );
 
   return [

@@ -106,13 +106,22 @@ export function report(
   stats: Stats,
   extra?: Record<string, unknown>,
 ) {
+  record({ lib, scenario, ...stats, ...extra });
+}
+
+/**
+ * Record that a library was skipped and why. jest doesn't show the names of
+ * skipped tests when a whole file is skipped, so the summary lists them.
+ */
+export function reportSkipped(lib: string, reason: string) {
+  record({ lib, skipped: reason });
+}
+
+function record(fields: Record<string, unknown>) {
   const result = {
     file: basename(expect.getState().testPath ?? ""),
-    lib,
     mode: MODE,
-    scenario,
-    ...stats,
-    ...extra,
+    ...fields,
   };
   if (process.env.BENCH_RESULTS_FILE) {
     appendFileSync(

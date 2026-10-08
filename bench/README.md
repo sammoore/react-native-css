@@ -47,7 +47,8 @@ In an interactive terminal, results are collected and printed as one summary
 at the end of the run: a table per React mode and stylesheet or benchmark
 file, with the median and (min–max) in ms. When other libraries ran, a
 `nw5/<library>` column divides v5's median by theirs: below 1× means v5 is
-faster. `yarn bench` prints a single summary covering both modes.
+faster. Libraries that were skipped are listed under each mode with the
+reason. `yarn bench` prints a single summary covering both modes.
 
 When output isn't a terminal (piped, or CI), each result is instead printed
 as it happens, as one `BENCH {...}` JSON line labelled with the library, React
