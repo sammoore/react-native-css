@@ -21,6 +21,7 @@ const STAT_KEYS = new Set([
   "mode",
   "scenario",
   "file",
+  "section",
   "css",
   "runs",
   "min",
@@ -29,8 +30,18 @@ const STAT_KEYS = new Set([
   "max",
 ]);
 
-/** Libraries in display order; the suite compares the first two. */
-const LIBS = ["nw5", "nw4"];
+/**
+ * Known libraries in display order. The first that ran is the baseline the
+ * others are compared with; unknown libraries are listed after these.
+ */
+const LIBS = ["nw5", "nw4", "uniwind"];
+
+/** The libraries in results, in display order. */
+function librariesIn(results) {
+  const present = [...new Set(results.map((r) => r.lib))];
+  const rank = (lib) => (LIBS.includes(lib) ? LIBS.indexOf(lib) : LIBS.length);
+  return present.sort((a, b) => rank(a) - rank(b));
+}
 
 /**
  * @param {NodeJS.ProcessEnv} env
@@ -100,10 +111,14 @@ function formatNotes(result) {
   return notes.join("; ");
 }
 
-/** The suite's two libraries share a section; other files get their own. */
+/**
+ * Results that set a section (the suite, which spans one file per library)
+ * share it; others are grouped by file. Either way, by stylesheet too.
+ */
 function sectionTitle(result) {
-  if (result.css) return `Suite, ${result.css} CSS`;
-  return result.file.replace(/\.(bench|diag)\.tsx$/, "");
+  const name =
+    result.section ?? result.file.replace(/\.(bench|diag)\.tsx$/, "");
+  return result.css ? `${name}, ${result.css} CSS` : name;
 }
 
 /** Group items by key, keeping first-seen order. */
@@ -125,36 +140,37 @@ const pad = (text, width) =>
 
 /**
  * Format one section: a table with a row per scenario and a timing column per
- * library. When both suite libraries ran, a ratio column compares them.
+ * library. When more than one library ran, a ratio column compares each with
+ * the first (the baseline): below 1× means the baseline is faster.
  *
  * @param {string} title
  * @param {Result[]} results
  * @param {ReturnType<typeof styles>} style
  */
 function formatSection(title, results, style) {
-  const libs = LIBS.filter((lib) => results.some((r) => r.lib === lib));
-  const compare = libs.length === 2;
+  const libs = librariesIn(results);
+  const [baseline, ...others] = libs;
   const byScenario = groupBy(results, (r) => r.scenario);
 
   const header = [
     "",
     ...libs,
-    ...(compare ? [`${libs[0]}/${libs[1]}`] : []),
+    ...others.map((lib) => `${baseline}/${lib}`),
     "notes",
   ];
   const rows = [...byScenario].map(([scenario, scenarioResults]) => {
     const forLib = (lib) => scenarioResults.find((r) => r.lib === lib);
-    const ratio =
-      compare && forLib(libs[0]) && forLib(libs[1])
-        ? `${(forLib(libs[0]).median / forLib(libs[1]).median).toFixed(2)}×`
+    const ratio = (lib) =>
+      forLib(baseline) && forLib(lib)
+        ? `${(forLib(baseline).median / forLib(lib).median).toFixed(2)}×`
         : "";
     return [
       scenario,
       ...libs.map((lib) =>
         forLib(lib) ? formatTiming(forLib(lib), style) : "",
       ),
-      ...(compare ? [ratio] : []),
-      style.dim(formatNotes(forLib(libs[0]) ?? scenarioResults[0])),
+      ...others.map(ratio),
+      style.dim(formatNotes(forLib(baseline) ?? scenarioResults[0])),
     ];
   });
 

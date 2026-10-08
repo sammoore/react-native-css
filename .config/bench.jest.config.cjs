@@ -1,5 +1,5 @@
 /* eslint-disable no-undef, @typescript-eslint/no-require-imports */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 
 /**
  * Jest config for the benchmarks in bench/ (*.bench.tsx). The default
@@ -8,11 +8,15 @@
  * Benchmarks don't exercise reanimated, so this skips the reanimated/worklets
  * global setup used by the regular test suite.
  *
- * When BENCH_NW4_INTEROP points at an installed react-native-css-interop, it
- * is mapped in for nw4.bench.tsx, and react, react-native and scheduler are
- * pinned to this package's copies. Without the pinning, a copy of the interop
- * installed elsewhere (e.g. another workspace) can resolve its own React,
- * which breaks hooks, or a different react-native, which skews results.
+ * When BENCH_NW4_INTEROP points at an installed react-native-css-interop, or
+ * BENCH_UNIWIND at an installed uniwind, it is mapped in, and react,
+ * react-native and scheduler are pinned to this package's copies. Without the
+ * pinning, a library installed elsewhere (e.g. another workspace) can resolve
+ * its own React, which breaks hooks, or a different react-native, which skews
+ * results.
+ *
+ * Uniwind ships TypeScript source for React Native, so it is mapped to that
+ * source and transformed like this package's own code.
  *
  * With NODE_ENV=production, React's production builds are used. Production
  * React has no act(), so `scheduler` is mapped to the mock scheduler, which
@@ -22,6 +26,7 @@
  * which React Native's jest setup otherwise forces to true.
  */
 const os = require("os");
+const fs = require("fs");
 const path = require("path");
 
 const jestExpo = require("jest-expo/jest-preset");
@@ -33,13 +38,17 @@ const resolveDir = (id, from = rootDir) =>
 const interopDir = process.env.BENCH_NW4_INTEROP
   ? path.resolve(process.env.BENCH_NW4_INTEROP)
   : undefined;
+const uniwindDir = process.env.BENCH_UNIWIND
+  ? fs.realpathSync(process.env.BENCH_UNIWIND)
+  : undefined;
 
 const production = process.env.NODE_ENV === "production";
 const reactDir = resolveDir("react");
 const schedulerDir = resolveDir("scheduler", reactDir);
 
 let moduleNameMapper = { ...jestExpo.moduleNameMapper };
-if (interopDir) {
+let transformIgnorePatterns = jestExpo.transformIgnorePatterns;
+if (interopDir || uniwindDir) {
   const reactNativeDir = resolveDir("react-native");
   moduleNameMapper = {
     ...moduleNameMapper,
@@ -48,9 +57,29 @@ if (interopDir) {
     "^react-native$": reactNativeDir,
     "^react-native/(.*)$": `${reactNativeDir}/$1`,
     "^scheduler$": schedulerDir,
+  };
+}
+if (interopDir) {
+  moduleNameMapper = {
+    ...moduleNameMapper,
     "^react-native-css-interop$": interopDir,
     "^react-native-css-interop/(.*)$": `${interopDir}/$1`,
   };
+}
+if (uniwindDir) {
+  moduleNameMapper = {
+    ...moduleNameMapper,
+    "^uniwind$": `${uniwindDir}/src/index.ts`,
+    "^uniwind/components/(.*)$": `${uniwindDir}/src/components/native/$1.tsx`,
+    "^culori$": require.resolve("culori", { paths: [uniwindDir] }),
+    // Babel's helpers for the transformed source, from this package.
+    "^@babel/runtime/(.*)$": `${resolveDir("@babel/runtime")}/$1`,
+  };
+  // Transform uniwind's source. `.bun` (like jest-expo's `.pnpm`) lets paths
+  // through bun's package store; packages inside it are still checked.
+  transformIgnorePatterns = transformIgnorePatterns.map((pattern, index) =>
+    index === 0 ? pattern.replace("(?!(", "(?!(uniwind|\\.bun|") : pattern,
+  );
 }
 if (production) {
   moduleNameMapper = {
@@ -83,6 +112,7 @@ module.exports = {
   // Run suites one at a time so nw4 and nw5 don't compete for CPU.
   maxWorkers: 1,
   moduleNameMapper,
+  transformIgnorePatterns,
   reporters: [
     "default",
     [

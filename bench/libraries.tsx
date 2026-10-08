@@ -3,8 +3,8 @@
  * Adapters for the libraries under test. Each one splits its work the way an
  * app does:
  *
- * - build(css): what the bundler does at build time, compiling CSS into the
- *   artifact the app ships. Never timed.
+ * - build(stylesheet): what the bundler does at build time, compiling CSS into
+ *   the artifact the app ships. Never timed.
  * - instantiate(artifact): prepares the shipped artifact (e.g. parsing it, as
  *   the JS engine would when loading the bundle) and returns load(), which
  *   performs what the app does when that module runs at startup: handing the
@@ -21,7 +21,7 @@ import {
   View as RNView,
 } from "react-native";
 
-import { STYLESHEET } from "./stylesheets";
+import { STYLESHEET, type StylesheetSource } from "./stylesheets";
 
 /** CSS variables the suite provides on its root, and their values. */
 export const THEME = {
@@ -42,7 +42,7 @@ export interface BenchLibrary {
   ThemedView: ComponentType<{ className?: string; children?: ReactNode }>;
   /** Pixels per rem in this library's Tailwind output. */
   rem: number;
-  build(css: string): Promise<string>;
+  build(stylesheet: StylesheetSource): Promise<string>;
   instantiate(artifact: string): () => void;
   reset(): void;
   /** Optional cumulative call counters, reported per timed run. */
@@ -85,7 +85,7 @@ export function nw5(): LibraryResult {
     ThemedView: (props) => <View {...props} style={themeVars} />,
     rem: 14,
     // Metro runs compile() and ships StyleCollection.inject(<JSON>).
-    build: async (css) => JSON.stringify(compile(css, {}).stylesheet()),
+    build: async ({ css }) => JSON.stringify(compile(css, {}).stylesheet()),
     instantiate: (artifact) => {
       const data = JSON.parse(artifact);
       return () => StyleCollection.inject(data);
@@ -135,12 +135,55 @@ export function nw4(): LibraryResult {
     ThemedView: (props) => <View {...props} style={themeVars} />,
     rem: 14,
     // v4's Metro transformer ships injectData(<JSON>).
-    build: async (css) => JSON.stringify(cssToReactNativeRuntime(css)),
+    build: async ({ css }) => JSON.stringify(cssToReactNativeRuntime(css)),
     instantiate: (artifact) => {
       const data = JSON.parse(artifact);
       return () => injectData(data);
     },
     reset: resetData,
+  };
+}
+
+/**
+ * Uniwind. Not a dependency of this package: set BENCH_UNIWIND to an installed
+ * copy (the package directory) to enable it.
+ *
+ * Its components are the ones Uniwind's Metro resolver substitutes for React
+ * Native's in an app. Its stylesheet is built by Uniwind's own transformer
+ * (see uniwind.ts) and loaded by running the module it generates.
+ */
+export function uniwind(): LibraryResult {
+  if (!process.env.BENCH_UNIWIND) {
+    return { name: "uniwind", skip: "set BENCH_UNIWIND to enable" };
+  }
+
+  const { ScopedVariables } = require("uniwind");
+  const { Pressable } = require("uniwind/components/Pressable");
+  const { Text } = require("uniwind/components/Text");
+  const { View } = require("uniwind/components/View");
+  const { compileUniwind } = require("./uniwind");
+
+  return {
+    name: "uniwind",
+    View,
+    Text,
+    Pressable,
+    ThemedView: (props) => (
+      <ScopedVariables variables={THEME}>
+        <View {...props} />
+      </ScopedVariables>
+    ),
+    // Uniwind's default rem.
+    rem: 16,
+    build: compileUniwind,
+    instantiate: (code) => {
+      // Parse the module, as the JS engine does when loading the bundle; its
+      // `require('uniwind')` resolves to the same runtime as the components.
+      const module = new Function("require", code);
+      return () => module(require);
+    },
+    // Each load replaces Uniwind's stylesheet and style caches wholesale.
+    reset: () => {},
   };
 }
 

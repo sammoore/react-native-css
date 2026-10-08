@@ -30,9 +30,20 @@ export interface Expected {
   borderRadius: number;
 }
 
-export interface Stylesheet {
+/** A stylesheet as the libraries' build steps receive it. */
+export interface StylesheetSource {
   name: StylesheetName;
+  /** CSS ready to compile: hand-written, or Tailwind output. */
   css: string;
+  /**
+   * For Tailwind stylesheets, what the Tailwind output was built from. A
+   * library whose bundler runs Tailwind itself (Uniwind) builds from this,
+   * with its own theme, instead of using `css`.
+   */
+  tailwind?: { classes: string[]; theme: string };
+}
+
+export interface Stylesheet extends StylesheetSource {
   /**
    * Resolved values the suite's sanity checks expect, given the library's
    * pixels per rem (Tailwind sizes are rem-based; plain CSS uses px).
@@ -132,6 +143,7 @@ export async function loadStylesheet(
   return {
     name: "tailwind",
     css: await buildTailwindCss([...classes], TAILWIND_THEME),
+    tailwind: { classes: [...classes], theme: TAILWIND_THEME },
     // Tailwind's theme: --spacing is 0.25rem (p-4 is 4 × spacing) and
     // --radius-2xl is 1rem.
     expected: (rem) => ({ padding: 4 * 0.25 * rem, borderRadius: 1 * rem }),
@@ -197,11 +209,14 @@ function plainRule(className: string) {
  * A large stylesheet for the startup benchmark: about 2,000 classes, as
  * plain CSS or Tailwind output depending on BENCH_CSS.
  */
-export async function loadLargeStylesheet() {
+export async function loadLargeStylesheet(): Promise<StylesheetSource> {
   const classes = largeClassList();
-  const css =
-    STYLESHEET === "plain"
-      ? classes.map(plainRule).join("\n")
-      : await buildTailwindCss(classes);
-  return { name: STYLESHEET, css, classes: classes.length };
+  if (STYLESHEET === "plain") {
+    return { name: "plain", css: classes.map(plainRule).join("\n") };
+  }
+  return {
+    name: "tailwind",
+    css: await buildTailwindCss(classes),
+    tailwind: { classes, theme: "" },
+  };
 }

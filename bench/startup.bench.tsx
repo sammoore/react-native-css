@@ -14,12 +14,27 @@
  * Tailwind output, as for the suite.
  */
 import { measure, report, RUNS, WARMUP_RUNS } from "./harness";
-import { nw4, nw5, withLibrary, type LibraryResult } from "./libraries";
-import { loadLargeStylesheet } from "./stylesheets";
+import {
+  nw4,
+  nw5,
+  uniwind,
+  withLibrary,
+  type LibraryResult,
+} from "./libraries";
+import { loadLargeStylesheet, type StylesheetSource } from "./stylesheets";
+import { largeClassList } from "./tailwind";
 
-const LIBRARIES: LibraryResult[] = [nw5(), nw4()];
+const LIBRARIES: LibraryResult[] = [nw5(), nw4(), uniwind()];
 
-let stylesheet: Awaited<ReturnType<typeof loadLargeStylesheet>>;
+/**
+ * Loads take milliseconds, and a large stylesheet module (Uniwind's is one
+ * big generated function) needs about ten runs before V8 has finished
+ * optimizing it. With fewer, the first timed runs measure V8 warming up
+ * rather than the library, so warm up at least ten times.
+ */
+const WARMUP = Math.max(WARMUP_RUNS, 10);
+
+let stylesheet: StylesheetSource;
 beforeAll(async () => {
   stylesheet = await loadLargeStylesheet();
 }, 120_000);
@@ -29,12 +44,12 @@ for (const result of LIBRARIES) {
     describe(`${lib.name} startup`, () => {
       let artifact: string;
       beforeAll(async () => {
-        artifact = await lib.build(stylesheet.css);
+        artifact = await lib.build(stylesheet);
       }, 120_000);
 
       const extra = () => ({
         css: stylesheet.name,
-        classes: stylesheet.classes,
+        classes: largeClassList().length,
         artifactKB: Math.round(artifact.length / 1024),
       });
 
@@ -43,7 +58,7 @@ for (const result of LIBRARIES) {
         const stats = measure(
           () => load(),
           RUNS,
-          WARMUP_RUNS,
+          WARMUP,
           () => {
             lib.reset();
             load = lib.instantiate(artifact);
@@ -59,7 +74,7 @@ for (const result of LIBRARIES) {
         const stats = measure(
           () => load(),
           RUNS,
-          WARMUP_RUNS,
+          WARMUP,
           () => {
             load = lib.instantiate(artifact);
           },

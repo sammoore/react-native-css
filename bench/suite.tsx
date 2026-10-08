@@ -318,7 +318,7 @@ export function runSuite(lib: BenchLibrary) {
         Object.values(CLASSES),
         ITEMS_COUNT * RENDERS,
       );
-      artifact = await lib.build(stylesheet.css);
+      artifact = await lib.build(stylesheet);
     }, 120_000);
 
     for (const scenario of SCENARIOS) {
@@ -354,7 +354,10 @@ export function runSuite(lib: BenchLibrary) {
         const stats = measure(step, RUNS, 0);
         const after = lib.counters?.();
 
-        const extra: Record<string, unknown> = { css: stylesheet.name };
+        const extra: Record<string, unknown> = {
+          section: "Suite",
+          css: stylesheet.name,
+        };
         if (initial && firstRender && before && after) {
           for (const key of Object.keys(after)) {
             extra[`${key}OnFirstRender`] =
