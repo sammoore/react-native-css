@@ -40,10 +40,13 @@ export interface Stylesheet {
   expected: (rem: number) => Expected;
 }
 
-/** A class that matches one distinct rule per item (see "unique rule sets"). */
-export const uniqueClass = (index: number) => `mt-[${index}px]`;
+/**
+ * The nth class with a rule of its own, so no two share a rule set (see the
+ * "unique rule sets" scenarios).
+ */
+export const uniqueClass = (n: number) => `mt-[${n}px]`;
 
-function plainCss(itemsCount: number) {
+function plainCss(uniqueClassCount: number) {
   return `
   .flex-1 { flex: 1; }
   .flex-row { flex-direction: row; }
@@ -73,7 +76,7 @@ function plainCss(itemsCount: number) {
   .active\\:opacity-50:active { opacity: 0.5; }
   @media (min-width: 768px) { .md\\:flex-row { flex-direction: row; } }
   ${Array.from(
-    { length: itemsCount },
+    { length: uniqueClassCount },
     (_, i) => `.mt-\\[${i}px\\] { margin-top: ${i}px; }`,
   ).join("\n  ")}
 `;
@@ -106,16 +109,17 @@ const TAILWIND_THEME = `
 
 /**
  * Load the selected stylesheet. `classNames` are the class strings the suite
- * uses, so Tailwind generates exactly those utilities.
+ * uses, so Tailwind generates exactly those utilities, and uniqueClassCount is
+ * how many uniqueClass(n) rules to define.
  */
 export async function loadStylesheet(
   classNames: string[],
-  itemsCount: number,
+  uniqueClassCount: number,
 ): Promise<Stylesheet> {
   if (STYLESHEET === "plain") {
     return {
       name: "plain",
-      css: plainCss(itemsCount),
+      css: plainCss(uniqueClassCount),
       expected: () => ({ padding: 16, borderRadius: 16 }),
     };
   }
@@ -123,7 +127,7 @@ export async function loadStylesheet(
   const classes = new Set(
     classNames.flatMap((className) => className.split(/\s+/)).filter(Boolean),
   );
-  for (let i = 0; i < itemsCount; i++) classes.add(uniqueClass(i));
+  for (let n = 0; n < uniqueClassCount; n++) classes.add(uniqueClass(n));
 
   return {
     name: "tailwind",

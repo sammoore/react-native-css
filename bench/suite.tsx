@@ -41,7 +41,13 @@ import {
 
 export const ITEMS_COUNT = Number(process.env.BENCH_ITEMS ?? 1000);
 
-/** Every class string the suite renders, apart from uniqueClass(index). */
+/**
+ * Renders per scenario: the initial render, warmup runs and timed runs. The
+ * "first time" scenario needs fresh class names for every item in each.
+ */
+const RENDERS = 1 + WARMUP_RUNS + RUNS;
+
+/** Every class string the suite renders, apart from uniqueClass(n). */
 const CLASSES = {
   root: "flex-1",
   header: "flex-1 mb-4 p-4 rounded-lg bg-gray",
@@ -258,11 +264,23 @@ const SCENARIOS: Scenario[] = [
     check: expectPadded,
   },
   {
-    // A distinct rule set per item: no style observable can be shared, so
-    // every instance resolves its own declarations.
-    name: "mount, unique rule sets",
+    // A distinct rule set per item, the same ones every run. Libraries that
+    // keep resolved styles for class strings they've seen serve later runs
+    // from that cache; others resolve every instance again.
+    name: "mount, unique rule sets, repeat",
     kind: "mount",
     render: flat((index) => `${CLASSES.flat} ${uniqueClass(index)}`),
+    check: expectPadded,
+  },
+  {
+    // A distinct rule set per item that no earlier run has used, so no cache
+    // can help: every library resolves every instance from scratch.
+    name: "mount, unique rule sets, first time",
+    kind: "mount",
+    render: flat(
+      (index, { tick }) =>
+        `${CLASSES.flat} ${uniqueClass(tick * ITEMS_COUNT + index)}`,
+    ),
     check: expectPadded,
   },
   {
@@ -296,7 +314,10 @@ export function runSuite(lib: BenchLibrary) {
     let stylesheet: Stylesheet;
     let artifact: string;
     beforeAll(async () => {
-      stylesheet = await loadStylesheet(Object.values(CLASSES), ITEMS_COUNT);
+      stylesheet = await loadStylesheet(
+        Object.values(CLASSES),
+        ITEMS_COUNT * RENDERS,
+      );
       artifact = await lib.build(stylesheet.css);
     }, 120_000);
 
