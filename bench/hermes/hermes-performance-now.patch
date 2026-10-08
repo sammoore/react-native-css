@@ -1,0 +1,49 @@
+diff --git a/lib/ConsoleHost/ConsoleHost.cpp b/lib/ConsoleHost/ConsoleHost.cpp
+index 51f1bbc..64c3119 100644
+--- a/lib/ConsoleHost/ConsoleHost.cpp
++++ b/lib/ConsoleHost/ConsoleHost.cpp
+@@ -7,6 +7,8 @@
+ 
+ #include "hermes/ConsoleHost/ConsoleHost.h"
+ 
++#include <chrono>
++
+ #include "hermes/CompilerDriver/CompilerDriver.h"
+ #include "hermes/Support/MemoryBuffer.h"
+ #include "hermes/Support/OutputStream.h"
+@@ -170,6 +172,19 @@ static vm::CallResult<vm::HermesValue> loadSegment(
+   return HermesValue::encodeUndefinedValue();
+ }
+ 
++/// Milliseconds from a monotonic high-resolution clock, as performance.now()
++/// in React Native. Added for benchmarking; the CLI has no other timer finer
++/// than Date.now().
++static vm::CallResult<vm::HermesValue> performanceNow(
++    void *,
++    vm::Runtime &) {
++  using namespace std::chrono;
++  double ms =
++      duration<double, std::milli>(steady_clock::now().time_since_epoch())
++          .count();
++  return vm::HermesValue::encodeUntrustedNumberValue(ms);
++}
++
+ static vm::CallResult<vm::HermesValue> setTimeout(
+     void *ctx,
+     vm::Runtime &runtime) {
+@@ -371,6 +386,15 @@ void installConsoleBindings(
+       &ctx,
+       1);
+ 
++  defineGlobalFunc(
++      runtime
++          .ignoreAllocationFailure(runtime.getIdentifierTable().getSymbolHandle(
++              runtime, llvh::createASCIIRef("performanceNow")))
++          .get(),
++      performanceNow,
++      nullptr,
++      0);
++
+   // Define `setImmediate` to be the same as `setTimeout` here.
+   // `setTimeout` doesn't use the time provided to it, and due to this
+   // being CLI code, we don't have an event loop.
