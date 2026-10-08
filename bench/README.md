@@ -1,4 +1,4 @@
-# `src/bench`
+# `/bench`
 
 - **Tests remounts of styled and unstyled components**: key-swap remount, remount with a stable inline style, re-render with the same props, re-render with a new inline style, remount of wrapped components without classes, and a raw React Native baseline.
 - **Style checks**: Every styled scenario asserts that the first item has its border radius and its color resolved from the CSS variable.
@@ -6,7 +6,7 @@
 - **Call counts**: I kept only the calculateProps counter, which I confirmed intercepts real calls. It reports calls on first render (6 for the styled scenarios) and per timed run (0). The 0 is real: after warmup, remounted items reuse style observables the old tree is still holding.
 - **Profiling and isolation**: Profiling is opt-in with BENCH_PROFILE=<dir> and runs as a separate pass after timing. The config pins a single worker so the v4 and v5 suites don't compete for CPU.
 
-To run:
+To run (from the repo root):
 
 ```bash
 yarn jest -c .config/bench.jest.config.cjs
