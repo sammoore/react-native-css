@@ -14,7 +14,11 @@
  * need to be installed otherwise.
  */
 import type { ComponentType, ReactNode } from "react";
-import { Text as RNText, View as RNView } from "react-native";
+import {
+  Pressable as RNPressable,
+  Text as RNText,
+  View as RNView,
+} from "react-native";
 
 import { STYLESHEET } from "./stylesheets";
 
@@ -29,6 +33,7 @@ export interface BenchLibrary {
   name: string;
   View: ComponentType<any>;
   Text: ComponentType<any>;
+  Pressable: ComponentType<any>;
   /**
    * The suite's root View, providing THEME's variables to its children the
    * way this library does it. Accepts the same props as View.
@@ -50,6 +55,7 @@ export function nw5(): LibraryResult {
   require("react-native-css/jest");
   const { compile } = require("react-native-css/compiler");
   const { StyleCollection } = require("react-native-css/native-internal");
+  const { Pressable } = require("react-native-css/components/Pressable");
   const { Text } = require("react-native-css/components/Text");
   const { View } = require("react-native-css/components/View");
   const { vars } = require("react-native-css/runtime");
@@ -73,6 +79,7 @@ export function nw5(): LibraryResult {
     name: "nw5",
     View,
     Text,
+    Pressable,
     ThemedView: (props) => <View {...props} style={themeVars} />,
     rem: 14,
     // Metro runs compile() and ships StyleCollection.inject(<JSON>).
@@ -117,6 +124,7 @@ export function nw4(): LibraryResult {
     name: "nw4",
     View,
     Text: interop.cssInterop(RNText, { className: "style" }),
+    Pressable: interop.cssInterop(RNPressable, { className: "style" }),
     ThemedView: (props) => <View {...props} style={themeVars} />,
     rem: 14,
     // v4's Metro transformer ships injectData(<JSON>).

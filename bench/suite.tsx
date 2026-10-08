@@ -110,16 +110,20 @@ function FlatApp({
   lib,
   className,
   renderKey,
+  component = "View",
 }: {
   lib: BenchLibrary;
   className: (index: number) => string;
   renderKey: number;
+  /** The item component. */
+  component?: "View" | "Pressable";
 }) {
   const { View } = lib;
+  const Item = lib[component];
   return (
     <View key={renderKey}>
       {Array.from({ length: ITEMS_COUNT }, (_, index) => (
-        <View
+        <Item
           key={index}
           testID={`item-${index}`}
           className={className(index)}
@@ -156,12 +160,16 @@ function themed(mode: Mode) {
   );
 }
 
-function flat(className: (index: number, state: RunState) => string) {
+function flat(
+  className: (index: number, state: RunState) => string,
+  component: "View" | "Pressable" = "View",
+) {
   return (lib: BenchLibrary, state: RunState) => (
     <FlatApp
       lib={lib}
       className={(index) => className(index, state)}
       renderKey={state.renderKey}
+      component={component}
     />
   );
 }
@@ -267,10 +275,11 @@ const SCENARIOS: Scenario[] = [
     check: expectPadded,
   },
   {
-    // Interaction state: attaches press handlers and makes Views pressable.
+    // Interaction state on Pressable, the component every library applies
+    // active: to (some apply it only there, so a View would skip the work).
     name: "mount, active: pseudo-class",
     kind: "mount",
-    render: flat(() => CLASSES.active),
+    render: flat(() => CLASSES.active, "Pressable"),
     check: expectPadded,
   },
   {
