@@ -14,13 +14,15 @@ const THEME = readFileSync(THEME_PATH, "utf8");
 
 /**
  * Generate CSS for exactly `classes`. `@source inline(...)` keeps the output
- * independent of content scanning.
+ * independent of content scanning. `extraCss` is appended to the input, e.g.
+ * an `@theme` block defining project colors.
  */
-export async function buildTailwindCss(classes: string[]) {
+export async function buildTailwindCss(classes: string[], extraCss = "") {
   const input = [
     `@import "tailwindcss/theme.css" layer(theme);`,
     `@import "tailwindcss/utilities.css" layer(utilities) source(none);`,
     THEME,
+    extraCss,
     ...classes.map((name) => `@source inline("${name}");`),
   ].join("\n");
 

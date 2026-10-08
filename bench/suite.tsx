@@ -11,6 +11,10 @@
  * The targeted scenarios after it use flat trees of plain Views, each
  * isolating one runtime path: className string caching, per-instance rule
  * resolution, rule re-collection, interaction state and media queries.
+ *
+ * BENCH_CSS selects the stylesheet (see stylesheets.ts). Every class name
+ * rendered here is listed in CLASSES, so the Tailwind build generates exactly
+ * those utilities.
  */
 import type { ComponentType, ReactElement } from "react";
 import { Text as RNText, View as RNView, StyleSheet } from "react-native";
@@ -26,41 +30,14 @@ import {
   WARMUP_RUNS,
   type Renderer,
 } from "./harness";
+import {
+  loadStylesheet,
+  STYLESHEET,
+  uniqueClass,
+  type Stylesheet,
+} from "./stylesheets";
 
 export const ITEMS_COUNT = Number(process.env.BENCH_ITEMS ?? 1000);
-
-export const CSS = `
-  .flex-1 { flex: 1; }
-  .flex-row { flex-direction: row; }
-  .flex-wrap { flex-wrap: wrap; }
-  .gap-2 { gap: 8px; }
-
-  .p-4 { padding: 16px; }
-  .mb-4 { margin-bottom: 16px; }
-  .rounded-lg { border-radius: 8px; }
-  .bg-gray { background-color: var(--color-gray); }
-
-  .text-lg { font-size: 18px; }
-  .text-2xl { font-size: 24px; }
-  .text-center { text-align: center; }
-  .mb-1 { margin-bottom: 4px; }
-
-  .w-\\[32\\%\\] { width: 32%; }
-  .h-\\[100px\\] { height: 100px; }
-  .rounded-2xl { border-radius: 16px; }
-  .bg-primary { background-color: var(--color-primary); }
-  .items-center { align-items: center; }
-  .justify-center { justify-content: center; }
-  .text-typography { color: var(--color-typography); }
-  .font-bold { font-weight: 700; }
-
-  /* Targeted scenarios */
-  .bg-solid { background-color: #ef4444; }
-  .active\\:opacity-50:active { opacity: 0.5; }
-  @media (min-width: 768px) { .md\\:flex-row { flex-direction: row; } }
-  /* One distinct rule per item, so no two items share a rule set */
-  ${Array.from({ length: ITEMS_COUNT }, (_, i) => `.u-${i} { margin-top: ${i}px; }`).join("\n  ")}
-`;
 
 export const THEME = {
   "--color-primary": "#00a8ff",
@@ -68,8 +45,20 @@ export const THEME = {
   "--color-typography": "#000000",
 };
 
-const ITEM_CLASS =
-  "w-[32%] h-[100px] rounded-2xl bg-primary items-center justify-center";
+/** Every class string the suite renders, apart from uniqueClass(index). */
+const CLASSES = {
+  root: "flex-1",
+  header: "flex-1 mb-4 p-4 rounded-lg bg-gray",
+  title: "text-lg text-typography font-bold text-center mb-1",
+  container: "flex-row flex-wrap gap-2",
+  item: "w-[32%] h-[100px] rounded-2xl bg-primary items-center justify-center",
+  itemText: "text-typography font-bold text-2xl",
+  flat: "p-4 rounded-2xl bg-red-500",
+  toggleA: "p-4 rounded-2xl",
+  toggleB: "p-4 bg-red-500",
+  active: "p-4 active:opacity-50",
+  media: "p-4 md:flex-row",
+};
 const STABLE_INLINE = { marginTop: 1, opacity: 0.9 };
 
 export interface BenchLibrary {
@@ -109,26 +98,20 @@ function BenchApp({ lib, mode, renderKey, tick }: AppProps) {
   return (
     <View
       style={unstyled ? undefined : lib.themeVars}
-      className={cls("flex-1")}
+      className={cls(CLASSES.root)}
     >
-      <View className={cls("flex-1 mb-4 p-4 rounded-lg bg-gray")}>
-        <Text
-          className={cls("text-lg text-typography font-bold text-center mb-1")}
-        >
-          Benchmark
-        </Text>
+      <View className={cls(CLASSES.header)}>
+        <Text className={cls(CLASSES.title)}>Benchmark</Text>
       </View>
-      <View key={renderKey} className={cls("flex-row flex-wrap gap-2")}>
+      <View key={renderKey} className={cls(CLASSES.container)}>
         {Array.from({ length: ITEMS_COUNT }, (_, index) => (
           <View
             key={index}
             testID={`item-${index}`}
-            className={cls(ITEM_CLASS)}
+            className={cls(CLASSES.item)}
             style={itemStyle}
           >
-            <Text className={cls("text-typography font-bold text-2xl")}>
-              {index}
-            </Text>
+            <Text className={cls(CLASSES.itemText)}>{index}</Text>
           </View>
         ))}
       </View>
@@ -182,7 +165,7 @@ interface Scenario {
   kind: "remount" | "rerender" | "mount";
   render: (lib: BenchLibrary, state: RunState) => ReactElement;
   /** Sanity check that styles were applied. */
-  check?: (renderer: Renderer) => void;
+  check?: (renderer: Renderer, expected: Stylesheet["expected"]) => void;
 }
 
 function themed(mode: Mode) {
@@ -209,18 +192,19 @@ function firstItemStyles(renderer: Renderer) {
     .filter(Boolean);
 }
 
-function expectThemed(renderer: Renderer) {
+/** Rounded, and colored by the vars() on the root View. */
+function expectThemed(renderer: Renderer, expected: Stylesheet["expected"]) {
   expect(firstItemStyles(renderer)).toContainEqual(
     expect.objectContaining({
-      borderRadius: 16,
+      borderRadius: expected.borderRadius,
       backgroundColor: THEME["--color-primary"],
     }),
   );
 }
 
-function expectPadded(renderer: Renderer) {
+function expectPadded(renderer: Renderer, expected: Stylesheet["expected"]) {
   expect(firstItemStyles(renderer)).toContainEqual(
-    expect.objectContaining({ padding: 16 }),
+    expect.objectContaining({ padding: expected.padding }),
   );
 }
 
@@ -260,7 +244,7 @@ const SCENARIOS: Scenario[] = [
   {
     name: "mount, shared className",
     kind: "mount",
-    render: flat(() => "p-4 rounded-2xl bg-solid"),
+    render: flat(() => CLASSES.flat),
     check: expectPadded,
   },
   {
@@ -268,7 +252,7 @@ const SCENARIOS: Scenario[] = [
     // className string (e.g. the split cache) while still sharing rule sets.
     name: "mount, unique className strings",
     kind: "mount",
-    render: flat((index) => "p-4 rounded-2xl bg-solid" + " ".repeat(index + 1)),
+    render: flat((index) => CLASSES.flat + " ".repeat(index + 1)),
     check: expectPadded,
   },
   {
@@ -276,7 +260,7 @@ const SCENARIOS: Scenario[] = [
     // every instance resolves its own declarations.
     name: "mount, unique rule sets",
     kind: "mount",
-    render: flat((index) => `p-4 rounded-2xl bg-solid u-${index}`),
+    render: flat((index) => `${CLASSES.flat} ${uniqueClass(index)}`),
     check: expectPadded,
   },
   {
@@ -284,7 +268,7 @@ const SCENARIOS: Scenario[] = [
     name: "rerender, className toggles",
     kind: "rerender",
     render: flat((_, { tick }) =>
-      tick % 2 ? "p-4 rounded-2xl" : "p-4 bg-solid",
+      tick % 2 ? CLASSES.toggleA : CLASSES.toggleB,
     ),
     check: expectPadded,
   },
@@ -292,23 +276,28 @@ const SCENARIOS: Scenario[] = [
     // Interaction state: attaches press handlers and makes Views pressable.
     name: "mount, active: pseudo-class",
     kind: "mount",
-    render: flat(() => "p-4 active:opacity-50"),
+    render: flat(() => CLASSES.active),
     check: expectPadded,
   },
   {
     // Media query: rule matching reads and subscribes to the window width.
     name: "mount, media query",
     kind: "mount",
-    render: flat(() => "p-4 md:flex-row"),
+    render: flat(() => CLASSES.media),
     check: expectPadded,
   },
 ];
 
 export function runSuite(lib: BenchLibrary) {
-  describe(`${lib.name}, ${MODE} (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
+  describe(`${lib.name}, ${MODE}, ${STYLESHEET} CSS (${ITEMS_COUNT} items, ${RUNS} runs, ${WARMUP_RUNS} warmup)`, () => {
+    let stylesheet: Stylesheet;
+    beforeAll(async () => {
+      stylesheet = await loadStylesheet(Object.values(CLASSES), ITEMS_COUNT);
+    }, 120_000);
+
     for (const scenario of SCENARIOS) {
       test(scenario.name, async () => {
-        lib.setup(CSS);
+        lib.setup(stylesheet.css);
         const state: RunState = { renderKey: 0, tick: 0 };
         const element = () => scenario.render(lib, state);
         const initial = lib.counters?.();
@@ -339,7 +328,7 @@ export function runSuite(lib: BenchLibrary) {
         const stats = measure(step, RUNS, 0);
         const after = lib.counters?.();
 
-        const extra: Record<string, number> = {};
+        const extra: Record<string, unknown> = { css: stylesheet.name };
         if (initial && firstRender && before && after) {
           for (const key of Object.keys(after)) {
             extra[`${key}OnFirstRender`] =
@@ -351,10 +340,10 @@ export function runSuite(lib: BenchLibrary) {
         }
         report(lib.name, scenario.name, stats, extra);
 
-        scenario.check?.(renderer);
+        scenario.check?.(renderer, stylesheet.expected);
 
         if (scenario === SCENARIOS[0]) {
-          await profile(`${lib.name}-remount`, () => {
+          await profile(`${lib.name}-${stylesheet.name}-remount`, () => {
             for (let i = 0; i < RUNS; i++) step();
           });
         }

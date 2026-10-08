@@ -11,12 +11,19 @@
  *
  * Uses cssInterop()-wrapped components directly. That is the code path v4's
  * JSX runtime swap selects, without needing its babel transform.
+ *
+ * Skipped with BENCH_CSS=tailwind: NativeWind v4 is built on Tailwind CSS v3,
+ * so running it on Tailwind v4 output would be neither supported nor a fair
+ * comparison.
  */
 import { Text as RNText, View as RNView } from "react-native";
 
+import { STYLESHEET } from "./stylesheets";
 import { runSuite, THEME } from "./suite";
 
-if (process.env.BENCH_NW4_INTEROP) {
+if (STYLESHEET === "tailwind") {
+  test.skip("nw4 (NativeWind v4 uses Tailwind CSS v3; BENCH_CSS=tailwind is v5 only)", () => {});
+} else if (process.env.BENCH_NW4_INTEROP) {
   const interop = require("react-native-css-interop");
   const {
     cssToReactNativeRuntime,
