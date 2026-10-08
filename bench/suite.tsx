@@ -19,6 +19,7 @@
 import type { ReactElement } from "react";
 import { Text as RNText, View as RNView, StyleSheet } from "react-native";
 
+import { CLASSES } from "./classes";
 import {
   act,
   create,
@@ -47,20 +48,6 @@ export const ITEMS_COUNT = Number(process.env.BENCH_ITEMS ?? 1000);
  */
 const RENDERS = 1 + WARMUP_RUNS + RUNS;
 
-/** Every class string the suite renders, apart from uniqueClass(n). */
-const CLASSES = {
-  root: "flex-1",
-  header: "flex-1 mb-4 p-4 rounded-lg bg-gray",
-  title: "text-lg text-typography font-bold text-center mb-1",
-  container: "flex-row flex-wrap gap-2",
-  item: "w-[32%] h-[100px] rounded-2xl bg-primary items-center justify-center",
-  itemText: "text-typography font-bold text-2xl",
-  flat: "p-4 rounded-2xl bg-red-500",
-  toggleA: "p-4 rounded-2xl",
-  toggleB: "p-4 bg-red-500",
-  active: "p-4 active:opacity-50",
-  media: "p-4 md:flex-row",
-};
 const STABLE_INLINE = { marginTop: 1, opacity: 0.9 };
 
 type Mode = "styled" | "stable-inline" | "fresh-inline" | "unstyled" | "raw";
