@@ -130,7 +130,7 @@ export function family<Key, Result = Key, Args extends any = void>(
   return Object.assign(
     (key: Key, args: Args) => {
       let value = map.get(key);
-      if (value === undefined) {
+      if (!value) {
         value = fn(key, args);
         map.set(key, value);
       }
@@ -139,9 +139,6 @@ export function family<Key, Result = Key, Args extends any = void>(
     {
       delete(key: Key) {
         return map.delete(key);
-      },
-      size() {
-        return map.size;
       },
       clear() {
         return map.clear();
@@ -170,7 +167,7 @@ export function weakFamily<Key extends WeakKey, Args = undefined, Result = Key>(
   return Object.assign(
     (key: Key, args: Args) => {
       let value = map.get(key);
-      if (value === undefined) {
+      if (!value) {
         value = fn(key, args);
         map.set(key, value);
       }
