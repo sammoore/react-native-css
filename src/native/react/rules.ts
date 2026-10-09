@@ -231,7 +231,7 @@ export function updateRules(
   }
 
   // Generate a StyleObservable for this unique set of rules / variables
-  const stylesObs = stylesFamily(generateStateHash(state, rules), rules);
+  const stylesObs = stylesFamily(state.configs, rules);
 
   // Get the guards without subscribing to the observable
   // We will subscribe within the render using the StyleEffect
@@ -279,59 +279,4 @@ function pushInlineRule(
       styleRuleSet.push(rule);
     }
   }
-}
-
-/**
- * Get a unique number for a weak key.
- */
-let hashKeyCount = 0;
-const hashKeyFamily = weakFamily(() => hashKeyCount++);
-
-export function generateStateHash(
-  state: ComponentState,
-  iterableKeys: Iterable<WeakKey>,
-): string {
-  // The config is always a key, so this never answers the empty string. That matters: the empty
-  // string used to double as a no-keys sentinel here, which would have given two different states
-  // one cache entry now that the key is a join rather than a digest.
-  return generateHash([state.configs, ...iterableKeys]);
-}
-
-/**
- * Encode a set of weak keys as a cache key.
- *
- * This is an exact canonical encoding rather than a hash: it has no chance of collision, and it
- * must not be folded back into one. The value keys the resolved-style cache, where two different
- * key sets meeting on one string do not cost a cache miss — the second element renders the first
- * element's styles.
- *
- * Every member is encoded. A key skipped here would be erased from the value, so two key sets
- * differing only in the skipped member would collide — which is why `WeakKey` is load-bearing
- * rather than decorative, and why a value outside it fails at the `WeakMap` rather than passing
- * through.
- */
-export function generateHash(keys: WeakKey[]): string {
-  // A Float64Array rather than an array, because `.sort()` on a typed array is numeric and native.
-  // `Array.prototype.sort` needs a comparator to order numbers, and that comparator is a JS
-  // function Hermes calls O(n log n) times — measured on a physical device, it is the whole cost of
-  // ordering here. Float64 rather than Int32 because the key counter is unbounded and Int32 wraps
-  // silently at 2^31, which would turn two distinct key sets into one string.
-  const numbers = new Float64Array(keys.length);
-  let index = 0;
-
-  for (const key of keys) {
-    numbers[index] = hashKeyFamily(key);
-    index += 1;
-  }
-
-  // Sorted, so a set of keys encodes the same however it was iterated. The
-  // caller relies on that: the rule set is a Set built in render order.
-  //
-  // Joined rather than folded into a single number, so distinct key sets
-  // cannot land on one string. This value keys the resolved-style cache, and
-  // a collision there does not cost a cache miss — it hands one element
-  // another element's styles.
-  numbers.sort();
-
-  return numbers.join(",");
 }

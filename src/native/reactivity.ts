@@ -179,6 +179,131 @@ export function weakFamily<Key extends WeakKey, Args = undefined, Result = Key>(
   );
 }
 
+/** Key-set cache **************************************************************/
+
+/**
+ * Every weak key gets a stable number. Numbering starts at 1 so no id is
+ * falsy, whatever `weakFamily` does with falsy results.
+ */
+let weakKeyCount = 1;
+const weakKeyId = weakFamily((_key: WeakKey) => weakKeyCount++);
+
+const MOD = 9007199254740871; // Largest prime within safe integer range 2^53
+const PRIME = 31;
+
+type KeySetEntry<Value> = {
+  /** The entry's key ids, sorted ascending. */
+  ids: number[];
+  value: Value;
+  next: KeySetEntry<Value> | undefined;
+};
+
+/**
+ * A cache keyed by a SET of weak keys (`first` plus everything in `rest`),
+ * independent of iteration order.
+ *
+ * The key set is folded into a number that only picks a bucket. Every hit is
+ * then confirmed by comparing the full, sorted id list, and entries whose
+ * folds collide are chained. So two different key sets can never share an
+ * entry, but no string is built and nothing is allocated on a hit.
+ *
+ * This keys the resolved-style cache, where sharing an entry between two
+ * different rule sets would render one element with another element's
+ * styles.
+ */
+export function keySetCache<Value>() {
+  const buckets = new Map<number, KeySetEntry<Value>>();
+  // Reused scratch for the key set being looked up.
+  const ids: number[] = [];
+  let count = 0;
+  let entries = 0;
+
+  /** Load `first` and `rest` into `ids` (sorted) and return their fold. */
+  function load(first: WeakKey, rest: Iterable<WeakKey>) {
+    let hash = 0;
+    let product = 1;
+    count = 0;
+
+    let id = weakKeyId(first);
+    ids[count++] = id;
+    hash = (hash ^ id) % MOD;
+    product = (product * (id + PRIME)) % MOD;
+
+    for (const key of rest) {
+      id = weakKeyId(key);
+      hash = (hash ^ id) % MOD;
+      product = (product * (id + PRIME)) % MOD;
+      // Insertion sort: key sets are small, and this avoids a comparator call.
+      let j = count - 1;
+      while (j >= 0 && ids[j]! > id) {
+        ids[j + 1] = ids[j]!;
+        j--;
+      }
+      ids[j + 1] = id;
+      count++;
+    }
+
+    return (hash + product) % MOD;
+  }
+
+  function matches(entry: KeySetEntry<Value>) {
+    const stored = entry.ids;
+    if (stored.length !== count) return false;
+    for (let i = 0; i < count; i++) {
+      if (stored[i] !== ids[i]) return false;
+    }
+    return true;
+  }
+
+  function remove(hash: number, entry: KeySetEntry<Value>) {
+    let previous: KeySetEntry<Value> | undefined;
+    for (let e = buckets.get(hash); e; previous = e, e = e.next) {
+      if (e !== entry) continue;
+      if (previous) {
+        previous.next = e.next;
+      } else if (e.next) {
+        buckets.set(hash, e.next);
+      } else {
+        buckets.delete(hash);
+      }
+      entries--;
+      return;
+    }
+  }
+
+  return {
+    /**
+     * Return the value cached for this key set, creating it if needed.
+     * `create` receives a `release` callback that removes the entry again.
+     */
+    get(
+      first: WeakKey,
+      rest: Iterable<WeakKey>,
+      create: (release: () => void) => Value,
+    ): Value {
+      const hash = load(first, rest);
+
+      for (let e = buckets.get(hash); e; e = e.next) {
+        if (matches(e)) return e.value;
+      }
+
+      const entry: KeySetEntry<Value> = {
+        ids: ids.slice(0, count),
+        value: undefined as Value,
+        next: buckets.get(hash),
+      };
+      buckets.set(hash, entry);
+      entries++;
+      entry.value = create(() => remove(hash, entry));
+      return entry.value;
+    },
+    /** Number of live entries, and of buckets they occupy. */
+    size() {
+      return { entries, buckets: buckets.size };
+    },
+  };
+}
+
 /********************************* Variables **********************************/
 
 export const VAR_SYMBOL = Symbol.for("react-native-css.var");
