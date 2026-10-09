@@ -1,4 +1,5 @@
-import { generateHash } from "../../native/react/rules";
+import { generateHash, generateStateHash } from "../../native/react/rules";
+import type { ComponentState } from "../../native/react/useNativeCss";
 
 /**
  * `generateHash` keys the resolved-style cache. Two different sets of rules landing on one key does
@@ -70,4 +71,15 @@ test("the encoding is integers, not floats or exponents", () => {
   const keys: WeakKey[] = [{}, {}, {}];
 
   expect(generateHash(keys)).toMatch(/^\d+(?:,\d+)*$/u);
+});
+
+test("a state hash always carries the config, so it is never the empty string", () => {
+  // The empty string used to double as a no-keys sentinel in `generateStateHash`. With the key a
+  // join rather than a digest, an empty key list renders as the empty string too — so the sentinel
+  // and a real state would have shared one cache entry. The config is an unconditional key, which
+  // is what makes the sentinel unnecessary rather than merely unlikely.
+  const state = { configs: [] } as unknown as ComponentState;
+
+  expect(generateStateHash(state, [])).not.toBe("");
+  expect(generateStateHash(state, [{}])).not.toBe("");
 });
