@@ -7,9 +7,9 @@ import type { ComponentState, Config } from "../react/useNativeCss";
 import {
   activeFamily,
   containerLayoutFamily,
+  family,
   focusFamily,
   hoverFamily,
-  keySetCache,
   observable,
   VAR_SYMBOL,
   type Effect,
@@ -160,46 +160,29 @@ function filterCssVariables(value: any, depth = 0): any | undefined {
   return value;
 }
 
-const stylesCache = keySetCache<StylesObservable>();
+export const stylesFamily = family(
+  (
+    hash: number,
+    rules: Set<StyleRule | InlineVariable | VariableContextValue>,
+  ) => {
+    const sortedRules = Array.from(rules).sort(specificityCompareFn);
 
-type StylesObservable = ReturnType<typeof createStylesObservable>;
+    const obs = observable((read) => calculateProps(read, sortedRules));
 
-function createStylesObservable(
-  rules: Set<StyleRule | InlineVariable | VariableContextValue>,
-  release: () => void,
-) {
-  const sortedRules = Array.from(rules).sort(specificityCompareFn);
-
-  const obs = observable((read) => calculateProps(read, sortedRules));
-
-  /**
-   * Release the cache entry once nothing observes it any more.
-   */
-  const unsubscribe = obs.unsubscribe;
-  return Object.assign(obs, {
-    unsubscribe: (effect: Effect) => {
-      unsubscribe(effect);
-      if (obs.observers.size === 0) {
-        release();
-      }
-    },
-  });
-}
-
-/**
- * One styles observable per distinct (configs, rules) set. Elements whose
- * configs and matched rules are the same objects share it.
- */
-export function stylesFamily(
-  configs: Config[],
-  rules: Set<StyleRule | InlineVariable | VariableContextValue>,
-): StylesObservable {
-  return stylesCache.get(configs, rules, (release) =>
-    createStylesObservable(rules, release),
-  );
-}
-
-stylesFamily.size = () => stylesCache.size();
+    /**
+     * A family is a map, so we need to cleanup the observers when the the hash is no longer used
+     */
+    const unsubscribe = obs.unsubscribe;
+    return Object.assign(obs, {
+      unsubscribe: (effect: Effect) => {
+        unsubscribe(effect);
+        if (obs.observers.size === 0) {
+          stylesFamily.delete(hash);
+        }
+      },
+    });
+  },
+);
 
 export function getStyledProps(
   state: ComponentState,
