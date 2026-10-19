@@ -195,6 +195,45 @@ export function getStyledProps(
 
   const styledProps = state.stylesObs?.get(state.styleEffect);
 
+  /**
+   * PERF: fast path for the overwhelmingly common case — a single
+   * className->style config, no !important styles, no native style
+   * remapping, no interaction/pressable handlers, and no inline style prop.
+   * Produces exactly what the general path below produces for this case
+   * ({...left, ...right} with right.style absent and the className source
+   * consumed) without the multi-config bookkeeping, per-key style merging,
+   * and CSS-variable filtering.
+   */
+  const fastPathConfig = state.configs[0];
+  if (
+    fastPathConfig &&
+    state.configs.length === 1 &&
+    fastPathConfig.target === "style" &&
+    !fastPathConfig.nativeStyleMapping &&
+    !styledProps?.important &&
+    (inline == null || inline.style == null) &&
+    !hoverFamily.has(state.ruleEffectGetter) &&
+    !activeFamily.has(state.ruleEffectGetter) &&
+    !focusFamily.has(state.ruleEffectGetter) &&
+    !containerLayoutFamily.has(state.ruleEffectGetter)
+  ) {
+    const left = adaptProps(styledProps?.normal);
+    if (!left) {
+      if (!inline) return undefined;
+      result = { ...inline };
+    } else {
+      result = { ...left };
+      if (inline) {
+        for (const key in inline) {
+          if (key === "style") continue;
+          result[key] = inline[key];
+        }
+      }
+    }
+    if (fastPathConfig.source !== "style") delete result[fastPathConfig.source];
+    return result;
+  }
+
   // Each config merges a complete props object. Preserve its full target path
   // before the next config merges unrelated inline props over that object.
   const computedTargets: { path: string[]; value: unknown }[] = [];
