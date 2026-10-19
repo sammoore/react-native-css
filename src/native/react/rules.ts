@@ -31,7 +31,10 @@ export function updateRules(
   forceUpdate = false,
   isRerender = true,
 ): ComponentState {
-  cleanupEffect(state.ruleEffect);
+  // PERF: light detach — this is immediately followed by re-subscription and
+  // then a full-record cleanupEffect in the useNativeCss initializer, so
+  // recording deps/snapshots here would only be overwritten.
+  cleanupEffect(state.ruleEffect, false);
   const guards: RenderGuard[] = [];
   const rules = new Set<StyleRule | InlineVariable | VariableContextValue>();
   if (forceUpdate) {

@@ -132,14 +132,21 @@ export function observable<Value, Arg = Value>(
   return obs;
 }
 
-export function cleanupEffect(effect: Effect) {
+export function cleanupEffect(effect: Effect, record = true) {
   if (!effect) return;
-  const dependencies = (effect.dependencies = Array.from(effect.observers));
-  // Snapshot before detaching so computed observables return cached values
-  effect.snapshots = dependencies.map(
-    (observable) =>
-      [observable, observable.get()] as [Observable<any, any>, unknown],
-  );
+  const dependencies = Array.from(effect.observers);
+  if (record) {
+    // PERF: record the dependency set before detaching. Every effect setup is
+    // immediately preceded by a cleanupEffect call on that effect (the state
+    // initializer's discard or React's cleanup-then-setup replay), so this is
+    // always the current set — see useNativeCss's reconnect effect.
+    effect.dependencies = dependencies;
+    // Snapshot before detaching so computed observables return cached values
+    effect.snapshots = dependencies.map(
+      (observable) =>
+        [observable, observable.get()] as [Observable<any, any>, unknown],
+    );
+  }
   effect.observers.clear();
   for (const dep of dependencies) {
     dep.unsubscribe(effect);

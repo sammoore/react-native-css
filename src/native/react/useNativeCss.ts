@@ -135,8 +135,9 @@ export function useNativeCss(
     }
     hasCommittedRef.current = true;
     return () => {
-      cleanupEffect(state.ruleEffect);
-      cleanupEffect(state.styleEffect);
+      // PERF: light detach — after unmount nothing replays these recordings
+      cleanupEffect(state.ruleEffect, false);
+      cleanupEffect(state.styleEffect, false);
     };
   }, [state.ruleEffect, state.styleEffect]);
 
