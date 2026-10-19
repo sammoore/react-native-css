@@ -26,7 +26,7 @@ if (typeof g.console === "undefined" && typeof print === "function") {
 // React Native defines `global`, which React's packages use.
 g.global ??= globalThis;
 
-// The Hermes CLI patched as README.md describes exposes a high-resolution
+// The Hermes CLI patched as HERMES_BENCH.md describes exposes a high-resolution
 // clock as performanceNow(); React Native apps have performance.now().
 declare const performanceNow: (() => number) | undefined;
 if (

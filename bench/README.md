@@ -207,6 +207,9 @@ Use these results to explain why a library costs what it does (cache hits,
 render counts, which path is taken) and to catch regressions. For how fast
 each library is in an app, measure on a device.
 
+To run the suite on Hermes, or to compare commits on Hermes and V8, see
+[`HERMES_BENCH.md`](../HERMES_BENCH.md).
+
 ## Profiling and isolation
 
 Profiling is opt-in with `BENCH_PROFILE=<dir>` and runs as a separate pass

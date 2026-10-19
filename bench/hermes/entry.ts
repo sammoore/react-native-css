@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * Entry point of the plain-script bench bundle (see README.md). Runs the
+ * Entry point of the plain-script bench bundle (see HERMES_BENCH.md). Runs the
  * shared suite (../suite.tsx) for NativeWind v5 and prints `BENCH {...}`
  * lines. build.mjs evaluates ./globals before this module and the suite,
  * which read jest's globals and process.env while their modules evaluate.

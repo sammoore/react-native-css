@@ -1,7 +1,7 @@
 /* eslint-disable */
 /**
  * Compare the suite between two git refs, on Hermes and on V8, with the same
- * bench code. See README.md.
+ * bench code. See HERMES_BENCH.md.
  *
  *   HERMES=/path/to/hermes node bench/hermes/compare.mjs <base> <head> \
  *     [--rounds 4] [--engines hermes,v8] [--filter <re>]
@@ -16,7 +16,7 @@
  *
  * build.mjs compiles the bytecode with the hermesc React Native ships, as a
  * release build does. HERMES must be a Hermes CLI with the same bytecode
- * version; see README.md for building one.
+ * version; see HERMES_BENCH.md for building one.
  */
 import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
@@ -47,7 +47,7 @@ const engines = args.engines.split(",");
 
 const hermes = process.env.HERMES;
 if (engines.includes("hermes") && !hermes) {
-  console.error("Set HERMES to a Hermes CLI binary (see README.md).");
+  console.error("Set HERMES to a Hermes CLI binary (see HERMES_BENCH.md).");
   process.exit(1);
 }
 

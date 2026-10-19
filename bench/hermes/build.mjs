@@ -1,7 +1,7 @@
 /* eslint-disable */
 /**
  * Builds the suite as one plain script that runs on Hermes (or Node) without
- * jest. See README.md.
+ * jest. See HERMES_BENCH.md.
  *
  *   node bench/hermes/build.mjs [--src <dir>] [--out <file>] [--filter <re>]
  *                               [--no-hbc]

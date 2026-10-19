@@ -1,7 +1,7 @@
 /* eslint-disable */
 /**
  * Stands in for ../harness.ts when the suite runs as a plain script (see
- * README.md). Same exports and timing loop; differences:
+ * HERMES_BENCH.md). Same exports and timing loop; differences:
  *
  * - The clock is whatever high-resolution timer the engine has (see now()).
  * - Results are printed as `BENCH {...}` JSON lines labelled with the engine,
