@@ -21,6 +21,14 @@ export { rootVariables, universalVariables };
 interface StyleCollectionType {
   styles: ReturnType<typeof family<string, Observable<StyleRuleSet>>>;
   keyframes: ReturnType<typeof family<string, Observable<Animation[1]>>>;
+  /**
+   * PERF: bumped on every inject. Components subscribe their ruleEffect to
+   * this single observable instead of one observable per className — a
+   * re-inject (Fast Refresh / hot reload) always replaces the whole sheet in
+   * one batched pass, so per-class notification granularity buys nothing
+   * while costing N subscriptions per component.
+   */
+  version: Observable<number>;
   inject: (options: ReactNativeCssStyleSheet) => void;
 }
 
@@ -38,8 +46,11 @@ globalThis.__react_native_css_style_collection ??= {
   keyframes: family<string, Observable<Animation[1]>>(() => {
     return observable([], isDeepEqual);
   }),
+  version: observable(0),
   inject: function (options: ReactNativeCssStyleSheet) {
     observableBatch.current = new Set();
+
+    StyleCollection.version.set(StyleCollection.version.get() + 1);
 
     StyleCollection.styles("will-change-variable").set([
       {

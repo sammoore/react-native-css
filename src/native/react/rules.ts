@@ -64,11 +64,13 @@ export function updateRules(
     const styleRuleSet = [];
 
     if (typeof source === "string") {
+      // PERF: subscribe ruleEffect to the global version observable once (it
+      // covers all re-injects) and read the class rule sets without
+      // subscribing — N class lookups collapse into one subscription.
+      StyleCollection.version.get(state.ruleEffect);
       const classNames = source.split(/\s+/);
       for (const className of classNames) {
-        styleRuleSet.push(
-          ...StyleCollection.styles(className).get(state.ruleEffect),
-        );
+        styleRuleSet.push(...StyleCollection.styles(className).get());
       }
     }
 
@@ -87,7 +89,7 @@ export function updateRules(
             INLINE_RULE_SYMBOL in item &&
             typeof item[INLINE_RULE_SYMBOL] === "string"
           ) {
-            pushInlineRule(state, item, styleRuleSet);
+            pushInlineRule(item, styleRuleSet);
           }
         }
       } else if (
@@ -101,7 +103,7 @@ export function updateRules(
         INLINE_RULE_SYMBOL in target &&
         typeof target[INLINE_RULE_SYMBOL] === "string"
       ) {
-        pushInlineRule(state, target, styleRuleSet);
+        pushInlineRule(target, styleRuleSet);
       }
     }
 
@@ -278,13 +280,9 @@ const getRuleVariation = weakFamily((rule: StyleRule) => {
   });
 });
 
-function pushInlineRule(
-  state: ComponentState,
-  item: any,
-  styleRuleSet: StyleRule[],
-) {
+function pushInlineRule(item: any, styleRuleSet: StyleRule[]) {
   for (const className of item[INLINE_RULE_SYMBOL].split(/\s+/)) {
-    let inlineRuleSet = StyleCollection.styles(className).get(state.ruleEffect);
+    let inlineRuleSet = StyleCollection.styles(className).get();
 
     for (let rule of inlineRuleSet) {
       styleRuleSet.push(rule);

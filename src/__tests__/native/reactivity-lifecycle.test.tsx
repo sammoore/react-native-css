@@ -162,11 +162,18 @@ test("class changes detach the old rule subscription", () => {
   );
   const first = StyleCollection.styles("audit-rule-first");
   const second = StyleCollection.styles("audit-rule-second");
+  // Components subscribe their rule effect to the global version
+  // observable (see style-collection.ts) instead of the per-class
+  // observables — one subscription per component, covering all re-injects.
+  const version = StyleCollection.version;
+  const versionSubscribers = version.observers.size;
   const screen = render(<View testID="sample" className="audit-rule-first" />);
-  expect(first.observers.size).toBe(1);
+  expect(version.observers.size).toBe(versionSubscribers + 1);
   screen.rerender(<View testID="sample" className="audit-rule-second" />);
   expect(screen.getByTestId("sample").props.style.width).toBe(20);
+  // No subscription is retained on either class observable
   expect(first.observers.size).toBe(0);
-  screen.unmount();
   expect(second.observers.size).toBe(0);
+  screen.unmount();
+  expect(version.observers.size).toBe(versionSubscribers);
 });
